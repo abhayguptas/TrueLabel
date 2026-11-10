@@ -16,6 +16,12 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
+function responseBody(value: unknown): Record<string, unknown> {
+  const body = record(value);
+  const nested = record(body.response);
+  return Object.keys(nested).length ? nested : body;
+}
+
 function values(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
   return typeof value === "string" ? [value] : [];
@@ -325,10 +331,15 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     instructions: "This is the front label when both images were supplied. Extract only exact testable front-label claims: quantified nutrition or dose statements, ingredient presence or absence, or functional or physiological benefit claims. Exclude dates, heritage statements, brand names, slogans, taste descriptions, awards, generic adjectives, product-category labels, net weight, and directions.",
     fields: { claims: { description: "verbatim testable front-label claim only", list: true, max_items: 8 } }
   }, { cache: false }) : extract;
+  const textClaimExtract = hasImages && safeText.trim() ? await clocked<Record<string, unknown>>("extract", {
+    text: safeText,
+    instructions: "Extract only the exact testable product claims stated by the user: quantified nutrition or dose statements, ingredient presence or absence, or functional or physiological benefit claims. Exclude conversational framing, dates, slogans, brands, awards, generic adjectives, and product-category labels.",
+    fields: { claims: { description: "verbatim testable claim only", list: true, max_items: 8 } }
+  }, { cache: false }) : null;
   const ingredients = normalizeIngredients(extract.data, sourceMode, safeText);
-  yield { stage: "extract", payload: { response: hasImages ? { ingredients: extract.data, claims: claimExtract.data } : extract.data, ingredients } };
+  yield { stage: "extract", payload: { response: hasImages ? { ingredients: extract.data, imageClaims: claimExtract.data, pastedClaims: textClaimExtract?.data } : extract.data, ingredients } };
 
-  const extractedClaims = fieldValues(claimExtract.data, "claims");
+  const extractedClaims = [...new Set([...fieldValues(claimExtract.data, "claims"), ...(textClaimExtract ? fieldValues(textClaimExtract.data, "claims") : [])])];
   const claims = verifiedClaims(extractedClaims, sourceMode, safeText);
   const category = productCategory(fill.data);
   const retrievalQuery = [safeText || structuredText, ingredients.map((ingredient) => ingredient.name).join(", ")].filter(Boolean).join("\n");
@@ -347,7 +358,8 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     instructions: "Select sources that substantively assess the verified label text, exact disclosed ingredients, region, or personal sensitivity context. For physiological or supplement claims, select a live PubMed record with a matching passage before a broad regulatory baseline when one is available. Prefer India-focused official records for regulatory context. Do not select a source merely because it is broadly about a category. Live PubMed sources are external retrieval results and must not be treated as product proof without a matching passage.",
     top_n: 8
   }, { cache: !hasImages && !safePersonalContext });
-  const rankings = Array.isArray(rerank.data.results) ? rerank.data.results.map(record) : [];
+  const rerankBody = responseBody(rerank.data);
+  const rankings = Array.isArray(rerankBody.results) ? rerankBody.results.map(record) : [];
   const selectedIds = new Set(rankings.filter((entry) => entry.action === "use" || entry.action === "expand").map((entry) => String(entry.id)));
   const rerankedReferences = candidates.filter((document) => selectedIds.has(document.id));
   const references = claims.length ? (rerankedReferences.length ? rerankedReferences : baselines) : [];
@@ -361,15 +373,16 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     ...(claims.length ? [] : [{ id: "label-ingredients", text: ingredients.map((ingredient) => ingredient.name).join(", ") || safeText.slice(0, 500) || structuredText.slice(0, 500) }]),
     ...(claims.length ? [] : references.slice(0, 1).map((document) => ({ id: `evidence-${document.id}`, text: evidenceClause(document, safeText || structuredText) })))
   ].filter((document) => document.text.trim());
-  const compare = await clocked<Record<string, unknown>>("compare", { documents: compareDocuments, instructions: "Identify only direct conflicts, formulation differences, and unsupported overlap between label statements and cited evidence.", evidence: "all", kinds: true }, { cache: !hasImages && !safePersonalContext });
-  const conflicts = (Array.isArray(compare.data.pairs) ? compare.data.pairs : []).flatMap((pair) => {
+  const compare = compareDocuments.length >= 2 ? await clocked<Record<string, unknown>>("compare", { documents: compareDocuments.slice(0, 20), instructions: "Identify only direct conflicts, formulation differences, and unsupported overlap between label statements and cited evidence.", evidence: "all", kinds: true }, { cache: !hasImages && !safePersonalContext }) : null;
+  const compareBody = responseBody(compare?.data);
+  const conflicts = (Array.isArray(compareBody.pairs) ? compareBody.pairs : []).flatMap((pair) => {
     const item = record(pair);
     return (Array.isArray(item.conflicts) ? item.conflicts : []).map((conflict) => {
       const finding = record(conflict);
       return { left: String(record(finding.a).quote ?? "Label statement"), right: String(record(finding.b).quote ?? "Reference evidence"), detail: String(finding.kind ?? "conflict"), confidence: numeric(finding.confidence) };
     });
   });
-  yield { stage: "compare", payload: { response: compare.data, conflicts } };
+  yield { stage: "compare", payload: { response: compare?.data ?? { status: "skipped", reason: "Comparison requires both a testable claim and a selected evidence passage." }, conflicts } };
 
   const groundingDocuments = references.length ? references.map((document) => ({ id: document.id, text: document.text })) : [{ id: "catalog-no-match", text: "No cited catalog reference was selected by Rerank for this product-label claim. The submitted label alone does not independently establish the marketing claim." }];
   const grounding = await clocked<Record<string, unknown>>("grounding", {
@@ -415,7 +428,7 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     conflicts,
     productDose: { product: String(record(record(fill.data.fields).product_dose).value ?? "Not disclosed"), clinical: references.find((reference) => reference.tags.includes("dose"))?.text ?? "No matched clinical dose" },
     regionalDiff: references.some((reference) => reference.tags.includes("regional")) ? { india: "Review the India ingredient disclosure", international: "Review the selected international disclosure", summary: "Compare the official country-specific ingredient lists shown in the evidence ledger." } : undefined,
-    raw: { guard: guards.map(safetySummary), protect: protectSummaries, fill: fill.data, rerank: rerank.data, extract: extract.data, compare: compare.data, grounding: grounding.data, decide: decide.data }
+    raw: { guard: guards.map(safetySummary), protect: protectSummaries, fill: fill.data, rerank: rerank.data, extract: extract.data, compare: compare?.data ?? { status: "skipped" }, grounding: grounding.data, decide: decide.data }
   };
   yield { stage: "verify_decide", payload: { grounding: grounding.data, decide: decide.data, result } };
   yield { stage: "complete", payload: { result } };
