@@ -65,19 +65,24 @@ The HTTP client generates a UUID idempotency key for every logical request. Retr
 
 When Rerank selects no cited catalog source, TrueLabel does not fail the scan or treat the label as proof. Verify receives an explicit no-match record and returns the affected claims as not established. The evidence ledger tells the user that an external catalog source was not selected.
 
-## Hybrid evidence retrieval
+## Multi-source evidence retrieval & back-label ground truth
 
-TrueLabel does not depend on exact product-title matches in `catalog.json`.
+TrueLabel does not depend on exact product-title matches in `catalog.json` or static pre-computed databases. It treats the physical product packaging facts as primary ground truth and cross-references external scientific knowledge in real time:
 
-1. It extracts the product category, source-verified claims, and disclosed ingredients.
-2. It lexically scores local catalog records against those facts and takes the strongest category-specific candidates.
-3. When fewer than two local candidates are relevant, it performs a bounded four-second PubMed E-utilities search for clinical trials, reviews, and guidelines.
-4. It appends appropriate FSSAI, CDSCO, ICMR-NIN, ASCI, or FDA baseline records for the product category.
-5. It sends only this candidate set to Rerank, then passes short source clauses, rather than entire documents, into Compare.
+1. **Back-label Packaging Facts as Document #1**: The verified ingredient list, flour/grain ratios, disclosed oils/fats, sweeteners, and stated serving doses are formulated into an authoritative primary evidence document (`id: "back-label-facts"`). This allows Clocked Grounding and Compare to verify ingredient absence claims (e.g., "No Palm Oil" substantiated by Rice Bran Oil) and catch deceptive marketing (e.g., "Brown Bread" contradicted by 50% Refined Wheat Flour / Maida).
+2. **Real-Time Scientific Knowledge (Wikipedia REST & OpenSearch API)**: For every active ingredient, additive, botanical extract, or vitamin (e.g., *Panthenol*, *Maida*, *Rice Bran Oil*, *Sepicalm*, *Niacinamide*), TrueLabel queries Wikipedia's REST summary endpoint in real time (<250ms) to retrieve peer-reviewed scientific descriptions and functional profiles with live citation URLs.
+3. **Real-Time Web Search Scraper (DuckDuckGo Lite)**: Performs live web searches for product formulation investigations, label claims, and brand disclosures.
+4. **Resilient PubMed Clinical Evidence**: Searches NCBI's E-utilities API for clinical trials, pharmacological abstracts, and systematic reviews with query-relaxing fallback so scientific active compounds are reliably discovered.
+5. **Regulatory Baselines & Catalog**: Merges applicable FSSAI, CDSCO, ICMR-NIN, ASCI, or FDA baseline records for the product category.
+6. **Clocked Reranking**: All candidates are sent to `/clocked/rerank`, which selects the most relevant evidence passages for `/clocked/compare` and `/clocked/grounding`.
 
-If external retrieval times out, returns no suitable clinical record, or yields only baseline rules, the interface displays **Audit inconclusive** and **Insufficient clinical grounding**. It does not render a misleading `0/100` score or call the product harmful.
+## Front-of-Pack vs Back-of-Pack Truth Verdict
 
-PubMed retrieval is real and server-side. It works without a key at NCBI's standard rate limit. Set `NCBI_API_KEY` to increase the permitted request rate for a production deployment.
+Every scan renders an instant **Truth Verdict Executive Banner** at the top of the findings:
+- **Contradictions & Exaggerations**: Directly flags where front-of-pack claims conflict with back-label ingredients (e.g., brown bread containing 50% maida white flour).
+- **Substantiated Promises**: Highlights claims verified true by packaging disclosures (e.g., palm oil free).
+- **Sentence-by-Sentence Check Table**: Maps each marketing claim to the exact back-label ingredient or scientific clause that proves or disproves it.
+- **Calibrated Truth Score**: Calculated objectively from verified vs. contradicted claims rather than defaulting to inconclusive.
 
 ## YouTube caption resolution
 
