@@ -1,169 +1,187 @@
 "use client";
 
 import type { AnalyzeResult } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Search, ShieldAlert, ShieldCheck, Info } from "lucide-react";
+import { synthesizeExecutiveVerdict } from "@/lib/verdict-synthesizer";
+import { downloadFullReport } from "@/lib/report-exporter";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  FileText,
+  Printer,
+  Scale,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles
+} from "lucide-react";
 
-export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React.ReactElement {
-  const supported = result.claims.filter((c) => c.verdict === "supported");
-  const contradicted = result.claims.filter((c) => c.verdict === "contradicted");
-  const cautions = result.claims.filter((c) => c.verdict === "caution" || c.verdict === "not_stated");
+interface TruthVerdictBannerProps {
+  result: AnalyzeResult;
+  onToggleFullReport?: () => void;
+  isFullReportOpen?: boolean;
+}
 
-  // Calculate realistic score
-  const totalClaims = result.claims.length;
-  const rawScore = totalClaims
-    ? Math.round(((supported.length * 1.0 + cautions.length * 0.4) / totalClaims) * 100)
-    : result.ingredients.length ? 75 : 50;
-  
-  const score = Math.max(10, Math.min(100, contradicted.length > 0 ? Math.min(rawScore, 65) : rawScore));
-
-  const statusLabel =
-    contradicted.length > 0 || result.conflicts.length > 0
-      ? "Discrepancy Detected"
-      : score >= 80
-      ? "Highly Verified"
-      : "Partially Verified";
+export function TruthVerdictBanner({
+  result,
+  onToggleFullReport,
+  isFullReportOpen = false
+}: TruthVerdictBannerProps): React.ReactElement {
+  const verdict = synthesizeExecutiveVerdict(result);
 
   const statusClass =
-    contradicted.length > 0 || result.conflicts.length > 0
+    verdict.statusBadge === "red"
       ? "verdict-badge-red"
-      : score >= 80
+      : verdict.statusBadge === "green"
       ? "verdict-badge-green"
       : "verdict-badge-amber";
 
   return (
     <section className="verdict-banner">
+      {/* Header with Title and Score Pill */}
       <div className="verdict-header">
         <div>
-          <span className="eyebrow">Consumer Truth Engine · Scan Verdict</span>
+          <span className="eyebrow">
+            <Sparkles size={12} className="inline-icon" />
+            Consumer Truth Engine · AI Executive Verdict
+          </span>
           <h2 className="verdict-title">The Real Story Behind the Label</h2>
           <p className="verdict-subtitle">
-            Cross-examined {result.claims.length} front marketing claim(s) against {result.ingredients.length} back-label
-            ingredient(s) and scientific standards.
+            Cross-examined {result.claims.length} marketing claim(s) against {result.ingredients.length} back-label
+            ingredient(s), PubMed clinical trials, and regulatory standards.
           </p>
         </div>
         <div className={`verdict-score-pill ${statusClass}`}>
-          <div className="score-num">{score}<span>/100</span></div>
-          <div className="score-desc">{statusLabel}</div>
+          <div className="score-num">
+            {verdict.score}
+            <span>/100</span>
+          </div>
+          <div className="score-desc">{verdict.statusLabel}</div>
         </div>
       </div>
 
+      {/* AI Tailored Headline Callout */}
+      <div className={`executive-headline-box ${verdict.statusBadge}`}>
+        <strong>AI Truth Synthesis:</strong>
+        <p>{verdict.headline}</p>
+      </div>
+
+      {/* 3 Executive Takeaway Cards */}
       <div className="verdict-highlights-grid">
-        {contradicted.length > 0 || result.conflicts.length > 0 ? (
-          <div className="highlight-card red-card">
-            <div className="card-badge">
-              <AlertTriangle size={14} />
-              <span>Contradiction / Exaggeration</span>
-            </div>
-            <strong>Front promises conflict with packaging facts:</strong>
-            <ul>
-              {contradicted.map((c) => (
-                <li key={c.id}>
-                  <strong>&quot;{c.claim}&quot;</strong>: {c.evidence?.text ?? "Disproved by disclosed ingredients or composition."}
-                </li>
-              ))}
-              {result.conflicts.slice(0, 2).map((conf, idx) => (
-                <li key={idx}>
-                  <strong>{conf.detail}</strong>: &quot;{conf.left}&quot; vs &quot;{conf.right}&quot;
-                </li>
-              ))}
-            </ul>
+        {/* Card 1: The Reality Check */}
+        <div className={`highlight-card ${verdict.statusBadge === "red" ? "red-card" : "green-card"}`}>
+          <div className="card-badge">
+            {verdict.statusBadge === "red" ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+            <span>{verdict.statusBadge === "red" ? "Contradictions & Exaggerations" : "Substantiated Promises"}</span>
           </div>
-        ) : null}
+          <strong>{verdict.statusBadge === "red" ? "Front claims contradicted by back label:" : "Verified packaging promises:"}</strong>
+          <ul className="executive-bullets">
+            {verdict.realityBullets.map((bullet, idx) => (
+              <li key={idx}>
+                <strong>&quot;{bullet.claim}&quot;</strong>: {bullet.finding}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        {supported.length > 0 ? (
-          <div className="highlight-card green-card">
+        {/* Card 2: Personal Health & Allergy Check */}
+        {verdict.personalHealthAlert ? (
+          <div
+            className={`highlight-card ${
+              verdict.personalHealthAlert.level === "high"
+                ? "red-card"
+                : verdict.personalHealthAlert.level === "caution"
+                ? "amber-card"
+                : "green-card"
+            }`}
+          >
             <div className="card-badge">
-              <CheckCircle2 size={14} />
-              <span>Verified True</span>
+              {verdict.personalHealthAlert.level === "high" ? (
+                <ShieldAlert size={14} />
+              ) : verdict.personalHealthAlert.level === "caution" ? (
+                <AlertTriangle size={14} />
+              ) : (
+                <ShieldCheck size={14} />
+              )}
+              <span>Personal Health Assessment</span>
             </div>
-            <strong>Substantiated by packaging disclosures:</strong>
-            <ul>
-              {supported.map((c) => (
-                <li key={c.id}>
-                  <strong>&quot;{c.claim}&quot;</strong>: {c.evidence?.text ? `Backed by: ${c.evidence.text}` : "Confirmed by packaging ingredient disclosure."}
-                </li>
-              ))}
-            </ul>
+            <strong>{verdict.personalHealthAlert.title}</strong>
+            <p style={{ marginTop: "6px" }}>{verdict.personalHealthAlert.description}</p>
           </div>
-        ) : null}
-
-        {result.personalContextCaution && (
-          <div className={`highlight-card ${result.personalContextCaution.verdict === "high" ? "red-card" : "green-card"}`}>
+        ) : (
+          <div className="highlight-card amber-card">
             <div className="card-badge">
-              {result.personalContextCaution.verdict === "high" ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-              <span>Personal Allergy &amp; Health Check</span>
+              <ShieldCheck size={14} />
+              <span>Personal Health Check</span>
             </div>
-            <strong>{result.personalContextCaution.verdict === "high" ? "Allergy Trigger Detected" : "Personal Profile: All Clear"}</strong>
-            <p>{result.personalContextCaution.message}</p>
+            <strong>General Dietary Guidance:</strong>
+            <p style={{ marginTop: "6px" }}>
+              {result.productCategory === "packaged food"
+                ? "In food formulations, the first 3 ingredients represent the vast majority of net product weight."
+                : result.productCategory === "skincare"
+                ? "Active cosmetic ingredients work alongside emulsifiers. Check below for comedogenic ratings."
+                : "Supplement benefits depend on therapeutic milligram dosage matching clinical trials."}
+            </p>
           </div>
         )}
 
+        {/* Card 3: Actionable Bottom Line */}
         <div className="highlight-card amber-card">
           <div className="card-badge">
-            <Search size={14} />
-            <span>Formulation Insight</span>
+            <FileText size={14} />
+            <span>Consumer Bottom Line</span>
           </div>
-          <strong>Active Ingredients &amp; Base Reality:</strong>
-          <p>
-            {result.productCategory === "packaged food"
-              ? "Check the first 3 ingredients: in food labels, ingredients are declared in descending order by weight. Anything listed first constitutes the bulk of what you eat."
-              : result.productCategory === "skincare"
-              ? "In cosmetics, active ingredients work alongside emollients and humectants. Check comedogenic and fungal acne ratings below."
-              : "Supplement effectiveness depends on therapeutic dosage vs the actual milligrams in each serving."}
-          </p>
+          <strong>Recommendation:</strong>
+          <p style={{ marginTop: "6px" }}>{verdict.bottomLine}</p>
         </div>
       </div>
 
-      {result.claims.length > 0 && (
-        <div className="reality-check-table-wrap">
-          <div className="section-label">
-            <span>Front-of-Pack Claim vs Back-of-Pack Reality</span>
-            <span>Sentence-by-Sentence Check</span>
-          </div>
-          <table className="reality-table">
-            <thead>
-              <tr>
-                <th>Front Marketing Claim</th>
-                <th>Back-Label Facts &amp; Scientific Findings</th>
-                <th>Verdict</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.claims.map((claim) => (
-                <tr key={claim.id} className={`row-${claim.verdict}`}>
-                  <td className="claim-cell">
-                    <strong>&quot;{claim.claim}&quot;</strong>
-                    {claim.claimType && <span className="claim-tag">{claim.claimType}</span>}
-                  </td>
-                  <td className="evidence-cell">
-                    <p>{claim.evidence?.text ?? (claim.verdict === "supported" ? "Confirmed by back-label ingredient disclosure." : "Not explicitly confirmed or denied in packaging facts.")}</p>
-                    {claim.evidence?.documentId && (
-                      <span className="source-tag">Source: {claim.evidence.documentId}</span>
-                    )}
-                  </td>
-                  <td className="verdict-cell">
-                    <span className={`verdict-pill ${claim.verdict}`}>
-                      {claim.verdict === "supported" ? (
-                        <>
-                          <CheckCircle2 size={12} className="inline-icon" /> Verified True
-                        </>
-                      ) : claim.verdict === "contradicted" ? (
-                        <>
-                          <AlertTriangle size={12} className="inline-icon" /> Contradicted / Exaggerated
-                        </>
-                      ) : (
-                        <>
-                          <Info size={12} className="inline-icon" /> Unproven / Unstated
-                        </>
-                      )}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Regulatory & Educational Safe Harbor Disclaimer */}
+      <div className="legal-disclaimer-card">
+        <div className="disclaimer-title">
+          <Scale size={13} className="inline-icon" />
+          <span>Educational &amp; Regulatory Safe Harbor Notice</span>
         </div>
-      )}
+        <p>{verdict.disclaimer}</p>
+      </div>
+
+      {/* Action CTAs */}
+      <div className="verdict-action-bar">
+        {onToggleFullReport && (
+          <button
+            type="button"
+            className="action-btn-primary"
+            onClick={onToggleFullReport}
+          >
+            {isFullReportOpen ? (
+              <>
+                <ChevronUp size={16} /> Hide Detailed Technical Audit
+              </>
+            ) : (
+              <>
+                <ChevronDown size={16} /> View Detailed Full Audit Report (Interactive Graph, Claims Table, Studies)
+              </>
+            )}
+          </button>
+        )}
+
+        <button
+          type="button"
+          className="action-btn-secondary"
+          onClick={() => downloadFullReport(result)}
+        >
+          <Download size={15} /> Download Official Audit Report (HTML)
+        </button>
+
+        <button
+          type="button"
+          className="action-btn-secondary"
+          onClick={() => window.print()}
+        >
+          <Printer size={15} /> Print / Save as PDF
+        </button>
+      </div>
     </section>
   );
 }

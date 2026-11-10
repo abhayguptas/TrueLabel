@@ -41,19 +41,28 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
 
       <div className="conflicts">
         {result.conflicts.length ? (
-          result.conflicts.map((conflict, index) => (
-            <div key={`${conflict.detail}-${index}`} className="conflict-item">
-              <span className="conflict-tag">
-                <AlertTriangle size={12} className="inline-icon" /> {conflict.detail.toUpperCase()} CONFLICT
-              </span>
-              <p>
-                <strong>Claim:</strong> &quot;{conflict.left}&quot;
-              </p>
-              <p>
-                <strong>Reality:</strong> &quot;{conflict.right}&quot;
-              </p>
-            </div>
-          ))
+          result.conflicts.map((conflict, index) => {
+            const cleanDetail =
+              conflict.detail.toLowerCase() === "scope"
+                ? "FORMULATION DISCREPANCY"
+                : conflict.detail.toUpperCase();
+            const cleanRight =
+              conflict.right.length > 200 ? `${conflict.right.slice(0, 200)}...` : conflict.right;
+
+            return (
+              <div key={`${conflict.detail}-${index}`} className="conflict-item">
+                <span className="conflict-tag">
+                  <AlertTriangle size={12} className="inline-icon" /> {cleanDetail}
+                </span>
+                <p>
+                  <strong>Claim:</strong> &quot;{conflict.left}&quot;
+                </p>
+                <p>
+                  <strong>Packaging Reality:</strong> &quot;{cleanRight}&quot;
+                </p>
+              </div>
+            );
+          })
         ) : (
           <p className="no-conflict-note">
             <CheckCircle2 size={13} className="inline-icon" />

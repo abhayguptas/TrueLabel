@@ -6,13 +6,16 @@ import { HeaderBar } from "@/components/HeaderBar";
 import { IngredientReview } from "@/components/IngredientReview";
 import { PersonalRiskCard } from "@/components/PersonalRiskCard";
 import { PipelineStreamBar } from "@/components/PipelineStreamBar";
+import { RealityCheckTable } from "@/components/RealityCheckTable";
 import { RegionalAndLabelDiff } from "@/components/RegionalAndLabelDiff";
 import { SensitivityPills } from "@/components/SensitivityPills";
 import { TruthBadgeCard } from "@/components/TruthBadgeCard";
 import { TruthSpectrumSVG } from "@/components/TruthSpectrumSVG";
 import { TruthVerdictBanner } from "@/components/TruthVerdictBanner";
 import { UnifiedInput } from "@/components/UnifiedInput";
+import { downloadFullReport } from "@/lib/report-exporter";
 import type { AnalyzeResult, PipelineEvent, SensitivityKey } from "@/lib/types";
+import { ChevronDown, ChevronUp, Download } from "lucide-react";
 
 function deviceId(): string {
   const key = "truelabel_device_id";
@@ -33,6 +36,7 @@ export default function Home(): React.ReactElement {
   const [scanning, setScanning] = useState(false);
   const scanLock = useRef(false);
   const [selectedClaim, setSelectedClaim] = useState<string | null>(null);
+  const [showFullReport, setShowFullReport] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("truelabel_sensitivities");
@@ -129,15 +133,70 @@ export default function Home(): React.ReactElement {
         <PipelineStreamBar events={events} />
         {result && (
           <div className="results">
-            <TruthVerdictBanner result={result} />
-            <TruthSpectrumSVG result={result} onClaimSelect={focusClaim} />
-            <IngredientReview result={result} />
-            <div className="three-panels">
-              <PersonalRiskCard result={result} />
-              <RegionalAndLabelDiff result={result} />
-              <TruthBadgeCard result={result} />
-            </div>
-            <ClaimLedger result={result} selectedClaim={selectedClaim} />
+            <TruthVerdictBanner
+              result={result}
+              onToggleFullReport={() => setShowFullReport((prev) => !prev)}
+              isFullReportOpen={showFullReport}
+            />
+
+            {!showFullReport && (
+              <div className="full-report-prompt-card">
+                <div className="prompt-content">
+                  <strong>Explore the Complete Evidence Dossier</strong>
+                  <p>
+                    Inspect the interactive SVG Truth Spectrum, sentence-by-sentence reality table, {result.ingredients.length} disclosed packaging ingredients, and live clinical trials.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="action-btn-primary"
+                  onClick={() => {
+                    setShowFullReport(true);
+                    setTimeout(() => {
+                      document.getElementById("detailed-audit-report")?.scrollIntoView({ behavior: "smooth" });
+                    }, 50);
+                  }}
+                >
+                  <ChevronDown size={16} /> View Detailed Full Audit Report
+                </button>
+              </div>
+            )}
+
+            {showFullReport && (
+              <div id="detailed-audit-report" className="detailed-report-wrap">
+                <div className="section-divider">
+                  <span>Comprehensive Technical &amp; Scientific Audit</span>
+                </div>
+                <RealityCheckTable result={result} />
+                <TruthSpectrumSVG result={result} onClaimSelect={focusClaim} />
+                <IngredientReview result={result} />
+                <div className="three-panels">
+                  <PersonalRiskCard result={result} />
+                  <RegionalAndLabelDiff result={result} />
+                  <TruthBadgeCard result={result} />
+                </div>
+                <ClaimLedger result={result} selectedClaim={selectedClaim} />
+                <div className="report-footer-actions">
+                  <button
+                    type="button"
+                    className="action-btn-secondary"
+                    onClick={() => {
+                      setShowFullReport(false);
+                      document.getElementById("top")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    <ChevronUp size={15} /> Collapse Detailed Report
+                  </button>
+                  <button
+                    type="button"
+                    className="action-btn-primary"
+                    onClick={() => downloadFullReport(result)}
+                  >
+                    <Download size={15} /> Download Official Audit Report
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <footer>

@@ -324,7 +324,7 @@ function cautionFromAnswer(answer: Record<string, unknown>, message: string): Ca
   return { probability, verdict: probability >= 0.7 ? "high" : probability >= 0.35 ? "caution" : "low", message };
 }
 
-function interpretPersonalContext(
+export function interpretPersonalContext(
   personalContext: string,
   ingredients: IngredientResult[],
   decideProbability: number
@@ -346,6 +346,23 @@ function interpretPersonalContext(
   }
   if (/sugar|diabet/i.test(contextNorm)) {
     matchedTriggers.push(...ingredients.filter((i) => /sugar|glucose|syrup|maltodextrin|fructose|dextrose|sucrose|jaggery/i.test(i.name)).map((i) => i.name));
+  }
+  if (/blood\s*pressure|hypertension|\bbp\b|sodium|cardiac|heart/i.test(contextNorm)) {
+    matchedTriggers.push(
+      ...ingredients
+        .filter((i) => /salt|sodium|ins\s*621|ins\s*631|flavour\s*enhancer|monosodium|msg|palm|saturated/i.test(i.name))
+        .map((i) => i.name)
+    );
+  }
+  if (/digest|gut|stomach|ibs|acid|bloat|constipat|gastric/i.test(contextNorm)) {
+    matchedTriggers.push(
+      ...ingredients
+        .filter((i) => /maida|refined\s*wheat|palm|ins\s*330|acidity\s*regulator|preservative|ins\s*211|ins\s*282|artificial\s*colour|ins\s*102|ins\s*110|ins\s*621/i.test(i.name))
+        .map((i) => i.name)
+    );
+  }
+  if (/cholesterol|lipid/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /palm|palmolein|hydrogenated|saturated/i.test(i.name)).map((i) => i.name));
   }
   if (/palm/i.test(contextNorm)) {
     matchedTriggers.push(...ingredients.filter((i) => /palm|palmolein/i.test(i.name)).map((i) => i.name));
@@ -750,10 +767,15 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     const item = record(pair);
     return (Array.isArray(item.conflicts) ? item.conflicts : []).map((conflict) => {
       const finding = record(conflict);
+      const rawKind = String(finding.kind ?? "conflict");
+      const kindLabel =
+        rawKind.toLowerCase() === "scope"
+          ? "Formulation Discrepancy"
+          : rawKind.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
       return {
         left: String(record(finding.a).quote ?? "Front label claim"),
         right: String(record(finding.b).quote ?? "Back label fact"),
-        detail: String(finding.kind ?? "conflict"),
+        detail: kindLabel,
         confidence: numeric(finding.confidence) || 0.95
       };
     });
