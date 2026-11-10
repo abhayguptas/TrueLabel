@@ -2,13 +2,23 @@ import type { AnalyzeResult } from "@/lib/types";
 import { AlertTriangle, CheckCircle2, Globe, Scale } from "lucide-react";
 
 export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): React.ReactElement {
-  const showsDose = result.productCategory === "supplement";
+  // Only show dose block for ingestible supplements or pharmaceutical pills with stated dose
+  const showsDose =
+    result.productCategory === "supplement" &&
+    Boolean(result.productDose?.product && result.productDose.product !== "Not disclosed");
+
+  // Deduplicate conflict items by claim and reality text
+  const cleanConflicts = Array.from(
+    new Map(
+      result.conflicts.map((c) => [`${c.left.trim()}::${c.right.trim()}`, c])
+    ).values()
+  );
 
   return (
     <section className="panel comparison-panel">
       <p className="eyebrow">
         <Scale size={13} className="inline-icon" />
-        {showsDose ? "Dose & Formula Reality Check" : "Cross-Source Comparison"}
+        {showsDose ? "Dose & Clinical Reality Check" : "Formula & Cross-Source Comparison"}
       </p>
       <h2>Formula &amp; Claim Comparison</h2>
 
@@ -25,13 +35,13 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
         <div className="regional">
           <div>
             <span>
-              <Globe size={11} className="inline-icon" /> India Disclosure
+              <Globe size={11} className="inline-icon" /> India Formulation
             </span>
             <p>{result.regionalDiff.india}</p>
           </div>
           <div>
             <span>
-              <Globe size={11} className="inline-icon" /> International Disclosure
+              <Globe size={11} className="inline-icon" /> International / US Formulation
             </span>
             <p>{result.regionalDiff.international}</p>
           </div>
@@ -40,14 +50,15 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
       )}
 
       <div className="conflicts">
-        {result.conflicts.length ? (
-          result.conflicts.map((conflict, index) => {
+        {cleanConflicts.length ? (
+          cleanConflicts.map((conflict, index) => {
+            const rawDetail = conflict.detail.toLowerCase();
             const cleanDetail =
-              conflict.detail.toLowerCase() === "scope"
+              rawDetail === "scope" || rawDetail === "value"
                 ? "FORMULATION DISCREPANCY"
                 : conflict.detail.toUpperCase();
             const cleanRight =
-              conflict.right.length > 200 ? `${conflict.right.slice(0, 200)}...` : conflict.right;
+              conflict.right.length > 220 ? `${conflict.right.slice(0, 220)}...` : conflict.right;
 
             return (
               <div key={`${conflict.detail}-${index}`} className="conflict-item">

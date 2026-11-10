@@ -11,6 +11,7 @@ function decodeXml(value: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&#039;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, "\"")
     .replace(/\s+/g, " ")
@@ -54,7 +55,7 @@ export async function fetchWikipediaSummary(term: string, category: ReferenceDoc
           category,
           publisher: "Wikipedia / Scientific Reference",
           sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(cleanTerm)}`,
-          text: data.extract.slice(0, 1200),
+          text: decodeXml(data.extract).slice(0, 1200),
           tags: [cleanTerm.toLowerCase(), "scientific reference", "ingredient breakdown"]
         };
       }

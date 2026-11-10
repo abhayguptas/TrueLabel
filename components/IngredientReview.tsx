@@ -16,24 +16,34 @@ export function IngredientReview({ result }: { result: AnalyzeResult }): React.R
       </div>
       {result.ingredientReviews.length ? (
         <div className="ingredient-review-list">
-          {result.ingredientReviews.map((review) => (
-            <article key={review.ingredient} className={`ingredient-review-row ${review.status}`}>
-              <div>
-                <strong>{review.ingredient}</strong>
-                <span>{labels[review.status]}</span>
-              </div>
-              <p>{review.summary}</p>
-              {review.source ? (
-                <a href={review.source.sourceUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink size={12} className="inline-icon" /> {review.source.publisher}: {review.source.title}
-                </a>
-              ) : (
-                <span className="no-match-note">
-                  <CheckCircle2 size={11} className="inline-icon" /> Disclosed on product back label.
-                </span>
-              )}
-            </article>
-          ))}
+          {result.ingredientReviews.map((review) => {
+            const cleanSummary = review.summary
+              .replace(/&#039;/g, "'")
+              .replace(/&#39;/g, "'")
+              .replace(/&amp;/g, "&")
+              .replace(/&quot;/g, '"')
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">");
+
+            return (
+              <article key={review.ingredient} className={`ingredient-review-row ${review.status}`}>
+                <div>
+                  <strong>{review.ingredient}</strong>
+                  <span>{labels[review.status]}</span>
+                </div>
+                <p>{cleanSummary}</p>
+                {review.source ? (
+                  <a href={review.source.sourceUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink size={12} className="inline-icon" /> {review.source.publisher}: {review.source.title}
+                  </a>
+                ) : (
+                  <span className="no-match-note">
+                    <CheckCircle2 size={11} className="inline-icon" /> Disclosed on product back label.
+                  </span>
+                )}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="ingredient-review-empty">

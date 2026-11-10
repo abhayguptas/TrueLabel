@@ -83,29 +83,36 @@ export function summarizeClaimDiscrepancy(
 export function synthesizeExecutiveVerdict(result: AnalyzeResult): ExecutiveVerdict {
   const supported = result.claims.filter((c) => c.verdict === "supported");
   const contradicted = result.claims.filter((c) => c.verdict === "contradicted");
-  const cautions = result.claims.filter((c) => c.verdict === "caution" || c.verdict === "not_stated");
+  const cautions = result.claims.filter((c) => c.verdict === "caution" || c.verdict === "not_stated" || c.verdict === "unproven");
 
-  // Calibrate score
+  // Calibrate score separating 'Proven False' from 'Unverified / Awaiting Evidence'
   const total = result.claims.length;
-  const rawScore = total
-    ? Math.round(((supported.length * 1.0 + cautions.length * 0.4) / total) * 100)
-    : result.ingredients.length ? 75 : 50;
+  let score = 50;
+  let statusBadge: "red" | "green" | "amber" = "amber";
+  let statusLabel = "Awaiting Clinical Evidence";
 
-  const score = Math.max(10, Math.min(100, contradicted.length > 0 ? Math.min(rawScore, 65) : rawScore));
-
-  const statusBadge: "red" | "green" | "amber" =
-    contradicted.length > 0 || result.conflicts.length > 0
-      ? "red"
-      : score >= 80
-      ? "green"
-      : "amber";
-
-  const statusLabel =
-    contradicted.length > 0 || result.conflicts.length > 0
-      ? "Discrepancy Detected"
-      : score >= 80
-      ? "Highly Verified Formulation"
-      : "Partially Substantiated";
+  if (contradicted.length > 0 || result.conflicts.some((c) => !c.detail.includes("Sensitivity"))) {
+    statusBadge = "red";
+    statusLabel = "Discrepancy Detected";
+    const supportedBonus = total > 0 ? Math.round((supported.length / total) * 20) : 0;
+    score = Math.max(10, Math.min(35, 10 + supportedBonus));
+  } else if (supported.length > 0) {
+    const ratio = supported.length / Math.max(total, 1);
+    if (ratio >= 0.6) {
+      statusBadge = "green";
+      statusLabel = "Highly Verified Formulation";
+      score = Math.round(75 + ratio * 25);
+    } else {
+      statusBadge = "amber";
+      statusLabel = "Partially Substantiated";
+      score = Math.round(60 + ratio * 20);
+    }
+  } else {
+    // Unindexed items with zero contradictions: display "Unverified / Awaiting Evidence" rather than 0/100
+    statusBadge = "amber";
+    statusLabel = "Awaiting Clinical Evidence";
+    score = result.ingredients.length ? 60 : 50;
+  }
 
   // Build tailored headline
   let headline = "";
@@ -118,36 +125,45 @@ export function synthesizeExecutiveVerdict(result: AnalyzeResult): ExecutiveVerd
     } else {
       headline = `Clinical Discrepancy: Claims ${topContradicted} exceed verified scientific and dosage realities.`;
     }
-  } else if (score >= 80) {
+  } else if (supported.length > 0) {
     headline = "Substantiated Formulation: Front marketing claims align with back-label disclosures and evidence.";
   } else {
-    headline = "Partially Verified: Some claims lack direct clinical backing or therapeutic dosage thresholds.";
+    headline = "Awaiting Clinical Evidence: Front claims are not contradicted by declared ingredients, but lack matching peer-reviewed trials in current databases.";
   }
 
-  // Reality Bullets
-  const realityBullets: ExecutiveVerdict["realityBullets"] = [];
+  // Reality Bullets with deduplication
+  const rawBullets: ExecutiveVerdict["realityBullets"] = [];
   for (const claim of contradicted) {
-    realityBullets.push({
+    rawBullets.push({
       claim: claim.claim,
       finding: summarizeClaimDiscrepancy(claim, result.ingredients),
       verdict: "contradicted"
     });
   }
   for (const claim of supported.slice(0, 3)) {
-    realityBullets.push({
+    rawBullets.push({
       claim: claim.claim,
       finding: summarizeClaimDiscrepancy(claim, result.ingredients),
       verdict: "supported"
     });
   }
   for (const claim of cautions.slice(0, 2)) {
-    if (realityBullets.length >= 5) break;
-    realityBullets.push({
+    if (rawBullets.length >= 5) break;
+    rawBullets.push({
       claim: claim.claim,
       finding: "Unproven or lacking verifiable clinical threshold on label.",
       verdict: claim.verdict
     });
   }
+
+  // Deduplicate bullets so identical findings are not repeated
+  const seenFindings = new Set<string>();
+  const realityBullets = rawBullets.filter((b) => {
+    const key = `${b.claim.toLowerCase()}::${b.finding.toLowerCase()}`;
+    if (seenFindings.has(key)) return false;
+    seenFindings.add(key);
+    return true;
+  });
 
   // Personal Health Alert
   let personalHealthAlert: ExecutiveVerdict["personalHealthAlert"] = null;

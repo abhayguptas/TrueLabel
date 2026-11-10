@@ -1,18 +1,170 @@
 "use client";
 
 import { buildGraph } from "@/lib/graph-layout";
-import type { AnalyzeResult, Verdict } from "@/lib/types";
+import type { AnalyzeResult, GraphNode, Verdict } from "@/lib/types";
 
-const colors: Record<Verdict, string> = { supported: "#15803D", contradicted: "#B91C1C", caution: "#B45309", not_stated: "#B45309", unproven: "#B45309" };
+const colors: Record<Verdict, string> = {
+  supported: "#15803D",
+  contradicted: "#B91C1C",
+  caution: "#B45309",
+  not_stated: "#B45309",
+  unproven: "#B45309"
+};
 
-export function TruthSpectrumSVG({ result, onClaimSelect }: { result: AnalyzeResult; onClaimSelect: (id: string) => void }): React.ReactElement {
+export function TruthSpectrumSVG({
+  result,
+  onClaimSelect
+}: {
+  result: AnalyzeResult;
+  onClaimSelect: (id: string) => void;
+}): React.ReactElement {
   const { nodes, edges } = buildGraph(result);
   const columns = [120, 410, 700];
-  const position = (id: string) => {
-    const node = nodes.find((item) => item.id === id);
-    const index = nodes.filter((item) => item.column === node?.column).findIndex((item) => item.id === id);
-    return { x: columns[node?.column ?? 0], y: 74 + index * 100 };
-  };
-  const missing = [!result.claims.length ? "No testable claims" : "", !result.ingredients.length ? "No verified ingredients" : "", !result.references.length ? "No cited sources" : ""].filter(Boolean);
-  return <section className="spectrum"><div className="section-label"><span>Truth spectrum</span><span>Click evidence paths to inspect claims</span></div><div className="spectrum-key"><span>Claims</span><span>Label facts</span><span>Source evidence</span></div>{missing.length > 0 && <p className="graph-empty">{missing.join(" · ")}. {result.evidenceMessage}</p>}<svg viewBox="0 0 820 560" role="img" aria-label="Connections between claims, label facts, and evidence sources">{edges.map((edge) => { const from = position(edge.from); const to = position(edge.to); const color = colors[edge.verdict]; return <path key={edge.id} className={`graph-edge ${edge.verdict}`} d={`M ${from.x + 100} ${from.y} C ${from.x + 185} ${from.y}, ${to.x - 185} ${to.y}, ${to.x - 100} ${to.y}`} stroke={color} onClick={() => onClaimSelect(edge.claimId)} />; })}{nodes.map((node) => { const point = position(node.id); return <g key={node.id} className={`graph-node ${node.column === 1 && node.verdict === "caution" ? "triggered" : ""}`} onClick={() => node.id.startsWith("claim-") && onClaimSelect(node.id.replace("claim-", ""))}><rect x={point.x - 100} y={point.y - 30} width="200" height="60" rx="2" /><text x={point.x} y={point.y - 4} textAnchor="middle">{node.label.length > 25 ? `${node.label.slice(0, 25)}…` : node.label}</text><text x={point.x} y={point.y + 16} textAnchor="middle" className="node-meta">{node.column === 1 && node.verdict === "caution" ? "selected caution" : node.verdict ? node.verdict.replace("_", " ") : node.column === 1 ? "label fact" : "reference"}</text></g>})}</svg></section>;
+
+  const nodeMap = new Map<string, { node: GraphNode; x: number; y: number }>();
+  for (const node of nodes) {
+    const columnNodes = nodes.filter((item) => item.column === node.column);
+    const index = columnNodes.findIndex((item) => item.id === node.id);
+    nodeMap.set(node.id, {
+      node,
+      x: columns[node.column],
+      y: 74 + index * 95
+    });
+  }
+
+  // Filter edges so we ONLY draw paths where BOTH source and target cards exist with valid coordinates
+  const validEdges = edges.filter((edge) => nodeMap.has(edge.from) && nodeMap.has(edge.to));
+
+  const missing = [
+    !result.claims.length ? "No testable claims" : "",
+    !result.ingredients.length ? "No verified ingredients" : "",
+    !result.references.length ? "No cited sources" : ""
+  ].filter(Boolean);
+
+  const maxRows = Math.max(
+    nodes.filter((n) => n.column === 0).length,
+    nodes.filter((n) => n.column === 1).length,
+    nodes.filter((n) => n.column === 2).length,
+    4
+  );
+  const svgHeight = Math.max(480, 80 + maxRows * 95);
+
+  return (
+    <section className="spectrum">
+      <div className="section-label">
+        <span>Truth Spectrum &amp; Evidence Web</span>
+        <span>Click connecting paths to inspect underlying scientific grounding</span>
+      </div>
+
+      <div className="spectrum-key">
+        <span>Front Marketing Claims</span>
+        <span>Back-Label Ingredients</span>
+        <span>Scientific Ground Truth</span>
+      </div>
+
+      {missing.length > 0 && (
+        <p className="graph-empty">
+          {missing.join(" · ")}. {result.evidenceMessage}
+        </p>
+      )}
+
+      <svg
+        viewBox={`0 0 820 ${svgHeight}`}
+        role="img"
+        aria-label="Interactive graph connecting marketing claims, ingredients, and scientific literature"
+        style={{ width: "100%", height: "auto" }}
+      >
+        {/* Render valid edges only */}
+        {validEdges.map((edge) => {
+          const from = nodeMap.get(edge.from)!;
+          const to = nodeMap.get(edge.to)!;
+          const color = colors[edge.verdict];
+          return (
+            <path
+              key={edge.id}
+              className={`graph-edge ${edge.verdict}`}
+              d={`M ${from.x + 100} ${from.y} C ${from.x + 185} ${from.y}, ${to.x - 185} ${to.y}, ${to.x - 100} ${to.y}`}
+              stroke={color}
+              strokeWidth={edge.verdict === "contradicted" ? 3 : 2}
+              onClick={() => onClaimSelect(edge.claimId)}
+            />
+          );
+        })}
+
+        {/* Render nodes */}
+        {Array.from(nodeMap.values()).map(({ node, x, y }) => {
+          const isSensitivityTrigger = node.column === 1 && node.verdict === "caution";
+          const isContradictedClaim = node.column === 0 && node.verdict === "contradicted";
+          const isSupportedClaim = node.column === 0 && node.verdict === "supported";
+
+          let strokeColor = "var(--ink)";
+          let fillColor = "#fff";
+          let strokeWidth = 1.5;
+
+          if (isSensitivityTrigger) {
+            strokeColor = "#b91c1c";
+            fillColor = "#fee2e2";
+            strokeWidth = 2.5;
+          } else if (isContradictedClaim) {
+            strokeColor = "#b91c1c";
+            fillColor = "#fef2f2";
+            strokeWidth = 2;
+          } else if (isSupportedClaim) {
+            strokeColor = "#15803d";
+            fillColor = "#f0fdf4";
+            strokeWidth = 2;
+          }
+
+          return (
+            <g
+              key={node.id}
+              className={`graph-node ${isSensitivityTrigger ? "triggered" : ""}`}
+              onClick={() => node.id.startsWith("claim-") && onClaimSelect(node.id.replace("claim-", ""))}
+              style={{ cursor: node.id.startsWith("claim-") ? "pointer" : "default" }}
+            >
+              <rect
+                x={x - 100}
+                y={y - 32}
+                width="200"
+                height="64"
+                rx="3"
+                fill={fillColor}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
+              />
+              <text
+                x={x}
+                y={y - 6}
+                textAnchor="middle"
+                fontWeight="600"
+                fontSize="12"
+                fill="var(--ink)"
+              >
+                {node.label.length > 24 ? `${node.label.slice(0, 24)}…` : node.label}
+              </text>
+              <text
+                x={x}
+                y={y + 14}
+                textAnchor="middle"
+                fontSize="10"
+                fontWeight={isSensitivityTrigger ? "700" : "500"}
+                fill={isSensitivityTrigger ? "#b91c1c" : "#625f59"}
+                className="node-meta"
+              >
+                {isSensitivityTrigger
+                  ? "⚠ SENSITIVITY TRIGGER"
+                  : node.column === 0
+                  ? node.verdict
+                    ? node.verdict.toUpperCase().replace("_", " ")
+                    : "CLAIM"
+                  : node.column === 1
+                  ? "LABEL INGREDIENT"
+                  : "SCIENTIFIC REFERENCE"}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </section>
+  );
 }

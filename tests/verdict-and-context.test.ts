@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { interpretPersonalContext } from "../lib/pipeline-runner";
+import {
+  interpretPersonalContext,
+  isTestableClaim,
+  parseExplicitClaims,
+  matchesIngredientTerm,
+  evaluateNegativeAssertion
+} from "../lib/pipeline-runner";
 import { synthesizeExecutiveVerdict } from "../lib/verdict-synthesizer";
 import { generateFullReportHtml } from "../lib/report-exporter";
 import type { AnalyzeResult, IngredientResult } from "../lib/types";
@@ -136,6 +142,60 @@ describe("synthesizeExecutiveVerdict", () => {
     expect(html).toContain("Print / Save as PDF");
     expect(html).toContain("Executive Audit Verdict");
     expect(html).toContain("Regulatory &amp; Consumer Advisory Notice");
+  });
+
+  it("handles unindexed product without dropping truth score to 0/100", () => {
+    const unindexedResult: AnalyzeResult = {
+      ...mockResult,
+      claims: [
+        { id: "1", claim: "Gentle hydration", verdict: "unproven", confidence: 0.2 },
+        { id: "2", claim: "Clean formula", verdict: "not_stated", confidence: 0.1 }
+      ],
+      conflicts: []
+    };
+    const verdict = synthesizeExecutiveVerdict(unindexedResult);
+    expect(verdict.score).toBeGreaterThanOrEqual(50);
+    expect(verdict.statusBadge).toBe("amber");
+    expect(verdict.statusLabel).toBe("Awaiting Clinical Evidence");
+    expect(verdict.headline).toContain("Awaiting Clinical Evidence");
+  });
+});
+
+describe("claim parsing and negative assertions", () => {
+  it("keeps Non-Comedogenic and functional claims while rejecting pure buzzwords", () => {
+    expect(isTestableClaim("Non-Comedogenic")).toBe(true);
+    expect(isTestableClaim("Fragrance-Free")).toBe(true);
+    expect(isTestableClaim("10% Vitamin B5")).toBe(true);
+    expect(isTestableClaim("Delicious")).toBe(false);
+    expect(isTestableClaim("Delicious Paradise")).toBe(false);
+    expect(isTestableClaim("Since 1973")).toBe(false);
+  });
+
+  it("extracts all explicit claims from formatted text without dropping items", () => {
+    const text = `Product: Minimalist Vitamin B5 10% Moisturizer
+Front Claims: 10% Vitamin B5 (Panthenol) Moisturizer, Deeply hydrates skin & repairs skin barrier, Fragrance-Free, Non-Comedogenic
+Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Glycerin, Betaine, Polyacrylate-13, Polysorbate 20, Phenoxyethanol, Ethylhexylglycerin.`;
+    const claims = parseExplicitClaims(text);
+    expect(claims).toHaveLength(4);
+    expect(claims).toContain("Non-Comedogenic");
+    expect(claims).toContain("Fragrance-Free");
+  });
+
+  it("matches whole chemical words and prevents Glycerin matching Ethylhexylglycerin", () => {
+    expect(matchesIngredientTerm("Glycerin", "Glycerin")).toBe(true);
+    expect(matchesIngredientTerm("Vegetable Glycerin", "Glycerin")).toBe(true);
+    expect(matchesIngredientTerm("Ethylhexylglycerin", "Glycerin")).toBe(false);
+  });
+
+  it("verifies negative assertions like Fragrance-Free and No Palm Oil", () => {
+    const fragranceFreeIngredients: IngredientResult[] = [
+      { name: "Aqua", triggers: [] },
+      { name: "Panthenol (10%)", triggers: [] },
+      { name: "Glycerin", triggers: [] }
+    ];
+    const res = evaluateNegativeAssertion("Fragrance-Free", fragranceFreeIngredients);
+    expect(res?.verified).toBe(true);
+    expect(res?.reason).toContain("zero fragrance");
   });
 });
 
