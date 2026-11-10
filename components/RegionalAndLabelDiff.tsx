@@ -1,11 +1,15 @@
 import type { AnalyzeResult } from "@/lib/types";
+import { AlertTriangle, CheckCircle2, Globe, Scale } from "lucide-react";
 
 export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): React.ReactElement {
   const showsDose = result.productCategory === "supplement";
 
   return (
     <section className="panel comparison-panel">
-      <p className="eyebrow">{showsDose ? "Dose & Formula Reality Check" : "Cross-Source Comparison"}</p>
+      <p className="eyebrow">
+        <Scale size={13} className="inline-icon" />
+        {showsDose ? "Dose & Formula Reality Check" : "Cross-Source Comparison"}
+      </p>
       <h2>Formula &amp; Claim Comparison</h2>
 
       {showsDose && (
@@ -20,11 +24,15 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
       {result.regionalDiff && (
         <div className="regional">
           <div>
-            <span>India Disclosure</span>
+            <span>
+              <Globe size={11} className="inline-icon" /> India Disclosure
+            </span>
             <p>{result.regionalDiff.india}</p>
           </div>
           <div>
-            <span>International Disclosure</span>
+            <span>
+              <Globe size={11} className="inline-icon" /> International Disclosure
+            </span>
             <p>{result.regionalDiff.international}</p>
           </div>
           <strong>{result.regionalDiff.summary}</strong>
@@ -35,7 +43,9 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
         {result.conflicts.length ? (
           result.conflicts.map((conflict, index) => (
             <div key={`${conflict.detail}-${index}`} className="conflict-item">
-              <span className="conflict-tag">🚨 {conflict.detail.toUpperCase()}</span>
+              <span className="conflict-tag">
+                <AlertTriangle size={12} className="inline-icon" /> {conflict.detail.toUpperCase()} CONFLICT
+              </span>
               <p>
                 <strong>Claim:</strong> &quot;{conflict.left}&quot;
               </p>
@@ -46,7 +56,8 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
           ))
         ) : (
           <p className="no-conflict-note">
-            ✅ No direct formulation contradiction detected between the verified statements.
+            <CheckCircle2 size={13} className="inline-icon" />
+            No direct formulation contradiction detected between the verified statements.
           </p>
         )}
       </div>

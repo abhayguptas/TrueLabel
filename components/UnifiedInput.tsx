@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Wheat, Sparkles, Zap, Package, Camera, ArrowRight, CheckCircle2 } from "lucide-react";
 
 const presets = [
   {
     id: "bread",
-    label: "🍞 Brown Bread: Front vs Back (50% Maida)",
+    label: "Brown Bread: Front vs Back (50% Maida)",
+    icon: Wheat,
     query: `Product: English Oven Brown Sliced Bread
 Front Claims: 100% Whole Wheat Brown Bread, No Palm Oil, No Added Colours, 28% Daily Fibre Need
 Back Label Ingredients: Wheat Flour [Atta (50%)], Refined Wheat Flour [Maida (50%)], Yeast, Sugar, Iodized Salt, Wheat Gluten, Edible Vegetable Oil (Rice Bran), Class II Preservative (282), Malt Powder, Wheat Bran, Improvers [170(i), 510, 923, 1100], Acidity Regulator (260), Emulsifiers [471, 472e, 481(i)], Antioxidant (300).`,
@@ -13,7 +15,8 @@ Back Label Ingredients: Wheat Flour [Atta (50%)], Refined Wheat Flour [Maida (50
   },
   {
     id: "skincare",
-    label: "✨ Minimalist Vitamin B5 Cream (Fungal Acne)",
+    label: "Minimalist Vitamin B5 Cream (Fungal Acne)",
+    icon: Sparkles,
     query: `Product: Minimalist Vitamin B5 10% Moisturizer
 Front Claims: 10% Vitamin B5 (Panthenol) Moisturizer, Deeply hydrates skin & repairs skin barrier, Fragrance-Free, Non-Comedogenic
 Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Glycerin, Betaine, Polyacrylate-13, Polysorbate 20, Phenoxyethanol, Ethylhexylglycerin.`,
@@ -21,7 +24,8 @@ Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Gly
   },
   {
     id: "shilajit",
-    label: "⚡ Shilajit Booster (80% Cortisol Drop Claim)",
+    label: "Shilajit Booster (80% Cortisol Drop Claim)",
+    icon: Zap,
     query: `Product: Pure Himalayan Shilajit Booster Resin
 Front Claims: Clinically proven to lower cortisol by 80% and double testosterone in 14 days, 60% Fulvic Acid
 Back Label Ingredients: Purified Shilajit Resin (250mg), Ashwagandha Extract (50mg), Maltodextrin, Potassium Sorbate.`,
@@ -29,7 +33,8 @@ Back Label Ingredients: Purified Shilajit Resin (250mg), Ashwagandha Extract (50
   },
   {
     id: "snack",
-    label: "🥔 Pringles: India Palmolein vs US Sunflower",
+    label: "Pringles: India Palmolein vs US Sunflower",
+    icon: Package,
     query: `Product: Pringles Original Potato Crisps
 Front Claims: Original Crisp Flavor, Clean Taste, No Artificial Flavors
 Back Label (India Formula): Dried Potatoes, Edible Vegetable Oil (Palmolein), Rice Flour, Wheat Starch, Emulsifier (INS 471), Maltodextrin, Salt.
@@ -139,17 +144,21 @@ export function UnifiedInput({
       <div className="preset-bar">
         <span className="preset-label">One-Click Demos:</span>
         <div className="preset-pills">
-          {presets.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className="preset-pill"
-              disabled={scanning}
-              onClick={() => applyPreset(preset)}
-            >
-              {preset.label}
-            </button>
-          ))}
+          {presets.map((preset) => {
+            const Icon = preset.icon;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className="preset-pill"
+                disabled={scanning}
+                onClick={() => applyPreset(preset)}
+              >
+                <Icon size={14} className="pill-icon" />
+                <span>{preset.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -165,17 +174,17 @@ export function UnifiedInput({
       </p>
 
       <div className="context-field">
-        <label htmlFor="personal-context">Optional personal health / skin context</label>
+        <label htmlFor="personal-context">Optional personal health / allergy context</label>
         <textarea
           id="personal-context"
           value={personalContext}
           onChange={(event) => setPersonalContext(event.target.value)}
           maxLength={1000}
-          placeholder="For example: fungal acne prone, fragrance allergy, diabetes, high blood pressure, or strictly avoid palm oil. (Do not include names or private data)."
+          placeholder="For example: gluten allergy, celiac, fragrance allergy, diabetes, high blood pressure, or strictly avoid palm oil. (Do not include names or private data)."
           aria-describedby="personal-context-note"
         />
         <p id="personal-context-note">
-          Evaluated via /clocked/decide for personal sensitivity cautions. It does not replace professional medical care.
+          Evaluated via /clocked/decide for personal allergy and health alerts. It does not replace professional medical care.
         </p>
       </div>
 
@@ -197,13 +206,23 @@ export function UnifiedInput({
           onChange={(event) => selectImage(event.target.files?.[0], "back")}
         />
         <button type="button" className="upload-button" disabled={scanning} onClick={() => frontRef.current?.click()}>
-          {front ? "✓ Replace front label" : "📷 Upload front label"}
+          <Camera size={14} />
+          <span>{front ? "Replace front label" : "Upload front label"}</span>
         </button>
         <button type="button" className="upload-button" disabled={scanning} onClick={() => backRef.current?.click()}>
-          {back ? "✓ Replace back label" : "📷 Upload back label"}
+          <Camera size={14} />
+          <span>{back ? "Replace back label" : "Upload back label"}</span>
         </button>
-        {front && <span className="file-ready">Front photo loaded</span>}
-        {back && <span className="file-ready">Back photo loaded</span>}
+        {front && (
+          <span className="file-ready">
+            <CheckCircle2 size={13} /> Front photo loaded
+          </span>
+        )}
+        {back && (
+          <span className="file-ready">
+            <CheckCircle2 size={13} /> Back photo loaded
+          </span>
+        )}
       </div>
 
       {error && (
@@ -217,7 +236,8 @@ export function UnifiedInput({
           {query.length.toLocaleString()} / 15,000 product characters · {personalContext.length.toLocaleString()} / 1,000 context characters
         </span>
         <button type="button" className="scan-button" disabled={disabled || scanning} onClick={submit}>
-          {scanning ? "Analyzing with Clocked..." : disabled ? "Add API key to scan" : "Run Live Truth Scan ⚡"}
+          <span>{scanning ? "Analyzing with Clocked..." : disabled ? "Add API key to scan" : "Run Live Truth Scan"}</span>
+          <ArrowRight size={14} />
         </button>
       </div>
     </section>

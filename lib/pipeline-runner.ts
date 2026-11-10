@@ -324,6 +324,63 @@ function cautionFromAnswer(answer: Record<string, unknown>, message: string): Ca
   return { probability, verdict: probability >= 0.7 ? "high" : probability >= 0.35 ? "caution" : "low", message };
 }
 
+function interpretPersonalContext(
+  personalContext: string,
+  ingredients: IngredientResult[],
+  decideProbability: number
+): CautionResult {
+  const contextNorm = personalContext.toLowerCase();
+  const matchedTriggers: string[] = [];
+
+  if (/gluten|wheat|celiac|coeliac/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /wheat|atta|maida|gluten|barley|rye|malt/i.test(i.name)).map((i) => i.name));
+  }
+  if (/dairy|lactose|milk|whey|vegan/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /milk|dairy|lactose|whey|casein|butter|cheese|ghee/i.test(i.name)).map((i) => i.name));
+  }
+  if (/nut|peanut|almond|cashew|walnut/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /nut|peanut|almond|cashew|walnut|pistachio/i.test(i.name)).map((i) => i.name));
+  }
+  if (/soy|soya/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /soy|soya|lecithin/i.test(i.name)).map((i) => i.name));
+  }
+  if (/sugar|diabet/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /sugar|glucose|syrup|maltodextrin|fructose|dextrose|sucrose|jaggery/i.test(i.name)).map((i) => i.name));
+  }
+  if (/palm/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /palm|palmolein/i.test(i.name)).map((i) => i.name));
+  }
+  if (/fragrance|perfume|parfum/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /fragrance|parfum|linalool|limonene|perfume|essential oil/i.test(i.name)).map((i) => i.name));
+  }
+  if (/fungal\s*acne|malassezia/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /polysorbate|coconut oil|isopropyl|stearate|palmitate|oleate|ester|ferment/i.test(i.name)).map((i) => i.name));
+  }
+  if (/acne|comedogenic|pore/i.test(contextNorm)) {
+    matchedTriggers.push(...ingredients.filter((i) => /isopropyl myristate|isopropyl palmitate|coconut oil|lauric acid/i.test(i.name)).map((i) => i.name));
+  }
+
+  for (const ing of ingredients) {
+    const words = ing.name.toLowerCase().split(/[\s,\[\]()]+/);
+    for (const word of words) {
+      if (word.length >= 4 && contextNorm.includes(word) && !["flour", "extract", "acid", "salt", "water"].includes(word)) {
+        if (!matchedTriggers.includes(ing.name)) matchedTriggers.push(ing.name);
+      }
+    }
+  }
+
+  const uniqueTriggers = [...new Set(matchedTriggers)];
+  const hasTriggers = uniqueTriggers.length > 0;
+  const probability = hasTriggers ? Math.max(0.88, decideProbability || 0.88) : Math.min(0.12, decideProbability || 0.12);
+  const verdict: "low" | "caution" | "high" = hasTriggers ? (probability >= 0.7 ? "high" : "caution") : "low";
+
+  const message = hasTriggers
+    ? `Trigger Alert: Disclosed ingredients contain match(es) for your stated context ("${personalContext.slice(0, 30)}..."): ${uniqueTriggers.join(", ")}.`
+    : `All Clear: No matching ingredient triggers found for your stated context ("${personalContext.slice(0, 30)}...").`;
+
+  return { probability, verdict, message };
+}
+
 function safetySummary(response: Record<string, unknown>): Record<string, unknown> {
   const entities = Array.isArray(response.entities)
     ? response.entities
@@ -776,7 +833,11 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
 
   const overallCaution = cautionFromAnswer(record(decideAnswers.overall_caution), overallMessage);
   const personalContextCaution = safePersonalContext
-    ? cautionFromAnswer(record(decideAnswers.personal_context_caution), "Ingredient review based on your stated personal sensitivity.")
+    ? interpretPersonalContext(
+        safePersonalContext,
+        ingredients,
+        numeric(record(decideAnswers.personal_context_caution).noul ?? record(decideAnswers.personal_context_caution).probability)
+      )
     : undefined;
 
   const result: AnalyzeResult = {

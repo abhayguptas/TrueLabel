@@ -17,15 +17,25 @@
 .ingredient-review-row span{font:500 10px "JetBrains Mono",monospace;text-transform:uppercase;color:var(--amber)}
 .ingredient-review-row.india_reference span{color:var(--green)}
 .ingredient-review-row p{margin:8px 0;font-size:12px;line-height:1.45}
-.ingredient-review-row a,.no-match-note{font:500 11px/1.4 "JetBrains Mono",monospace;color:var(--ink)}
+.ingredient-review-row a,.no-match-note{font:500 11px/1.4 "JetBrains Mono",monospace;color:var(--ink);display:inline-flex;align-items:center;gap:4px}
 .ingredient-review-empty{border:1px solid var(--ink);padding:16px;background:var(--amber-bg)}
 .ingredient-review-empty p{margin:7px 0 0;font-size:13px;line-height:1.45}
+
+/* Icons and Utility Alignments */
+.inline-icon{display:inline-block;vertical-align:-2px;margin-right:4px}
+.pill-icon{display:inline-block;vertical-align:-2px;margin-right:6px;color:var(--ink)}
+.risk-icon{display:inline-block;vertical-align:-2px;margin-right:5px}
+.red-icon{color:var(--red)}
+.green-icon{color:var(--green)}
+.upload-button{display:inline-flex;align-items:center;gap:6px}
+.scan-button{display:inline-flex;align-items:center;gap:8px}
+.file-ready{display:inline-flex;align-items:center;gap:4px}
 
 /* One-Click Presets Bar */
 .preset-bar{margin:16px 0 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--paper);border:1px solid var(--ink);padding:10px 14px}
 .preset-label{font:600 11px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--ink)}
 .preset-pills{display:flex;gap:8px;flex-wrap:wrap}
-.preset-pill{border:1px solid var(--ink);background:#fff;padding:6px 11px;font:500 12px Inter,sans-serif;cursor:pointer;transition:transform 0.1s ease, background 0.1s ease}
+.preset-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ink);background:#fff;padding:6px 11px;font:500 12px Inter,sans-serif;cursor:pointer;transition:transform 0.1s ease, background 0.1s ease}
 .preset-pill:hover{background:var(--lime);transform:translateY(-1px);box-shadow:2px 2px 0 var(--ink)}
 
 /* Verdict Executive Banner */
@@ -43,7 +53,7 @@
 
 .verdict-highlights-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:22px 0}
 .highlight-card{border:1px solid var(--ink);padding:16px;background:var(--paper);box-shadow:2px 2px 0 var(--ink);position:relative}
-.card-badge{font:600 11px "JetBrains Mono",monospace;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px}
+.card-badge{display:flex;align-items:center;gap:6px;font:600 11px "JetBrains Mono",monospace;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px}
 .highlight-card strong{display:block;font-size:13px;margin-bottom:6px}
 .highlight-card ul{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.45}
 .highlight-card li{margin-bottom:6px}
@@ -67,16 +77,22 @@
 .reality-table .evidence-cell p{margin:0 0 5px;line-height:1.45;font-size:12.5px}
 .source-tag{font:500 10px "JetBrains Mono",monospace;color:#615f58}
 .reality-table .verdict-cell{width:22%;text-align:right}
-.verdict-pill{display:inline-block;padding:5px 9px;border:1px solid var(--ink);font:700 11px "JetBrains Mono",monospace;text-transform:uppercase}
+.verdict-pill{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border:1px solid var(--ink);font:700 11px "JetBrains Mono",monospace;text-transform:uppercase}
 .verdict-pill.supported{background:var(--green-bg);color:var(--green);border-color:var(--green)}
 .verdict-pill.contradicted{background:var(--red-bg);color:var(--red);border-color:var(--red)}
 .verdict-pill.caution,.verdict-pill.not_stated{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
 
+/* Personal Risk Card & Allergy Styles */
+.personal-context-row{background:var(--paper);border:1px solid var(--ink);padding:12px;margin-bottom:8px}
+.personal-context-row.high{background:var(--red-bg);border-color:var(--red)}
+.personal-context-row.low{background:var(--green-bg);border-color:var(--green)}
+.pill-prompt{font-size:12px;color:#625f59;line-height:1.45;display:flex;align-items:center;gap:6px;margin:12px 0 0}
+
 /* Conflict cards */
 .conflict-item{border-top:1px solid var(--ink);padding:10px 0}
-.conflict-tag{font:700 10px "JetBrains Mono",monospace;color:var(--red);display:block;margin-bottom:4px}
+.conflict-tag{font:700 10px "JetBrains Mono",monospace;color:var(--red);display:flex;align-items:center;gap:4px;margin-bottom:4px}
 .conflict-item p{margin:3px 0;font-size:12px;line-height:1.4}
-.no-conflict-note{color:var(--green);font-size:12px;margin:8px 0}
+.no-conflict-note{color:var(--green);font-size:12px;margin:8px 0;display:flex;align-items:center;gap:5px}
 
 @media(max-width:768px){
   .verdict-header{flex-direction:column}

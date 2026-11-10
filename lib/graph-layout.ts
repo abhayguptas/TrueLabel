@@ -2,7 +2,6 @@ import type { AnalyzeResult, GraphEdge, GraphNode, IngredientResult } from "@/li
 
 function matchIngredient(claimText: string, ingredients: IngredientResult[]): IngredientResult | undefined {
   const normClaim = claimText.toLowerCase();
-  // Direct keyword matches
   if (/palm|oil/i.test(normClaim)) {
     const oil = ingredients.find((i) => /oil|fat|palmolein/i.test(i.name));
     if (oil) return oil;
@@ -23,7 +22,6 @@ function matchIngredient(claimText: string, ingredients: IngredientResult[]): In
     const b5 = ingredients.find((i) => /panthenol|b5/i.test(i.name));
     if (b5) return b5;
   }
-  // Generic keyword match
   return ingredients.find((i) => normClaim.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(normClaim));
 }
 
@@ -45,44 +43,54 @@ export function buildGraph(result: AnalyzeResult): { nodes: GraphNode[]; edges: 
   ];
 
   const edges: GraphEdge[] = [];
+  const seenEdgeKeys = new Set<string>();
 
   claims.forEach((claim, index) => {
     const claimId = `claim-${claim.id}`;
-    // Find best matching ingredient or fallback
     const matchedIng = matchIngredient(claim.claim, ingredients) ?? ingredients[index % Math.max(ingredients.length, 1)];
-
-    // Find best matching reference (or back-label / science)
     const matchedRef =
       (claim.evidence?.documentId ? references.find((r) => r.id === claim.evidence?.documentId) : undefined) ??
       references.find((r) => r.id !== "back-label-facts") ??
       references[0];
 
     if (matchedIng) {
-      edges.push({
-        id: `${claimId}-${matchedIng.name}`,
-        from: claimId,
-        to: `ingredient-${matchedIng.name}`,
-        verdict: claim.verdict,
-        claimId: claim.id
-      });
+      const edge1Id = `edge-claim-${claim.id}-ing-${index}`;
+      if (!seenEdgeKeys.has(edge1Id)) {
+        seenEdgeKeys.add(edge1Id);
+        edges.push({
+          id: edge1Id,
+          from: claimId,
+          to: `ingredient-${matchedIng.name}`,
+          verdict: claim.verdict,
+          claimId: claim.id
+        });
+      }
 
       if (matchedRef) {
+        const edge2Id = `edge-ing-${matchedIng.name}-ref-${index}`;
+        if (!seenEdgeKeys.has(edge2Id)) {
+          seenEdgeKeys.add(edge2Id);
+          edges.push({
+            id: edge2Id,
+            from: `ingredient-${matchedIng.name}`,
+            to: `reference-${matchedRef.id}`,
+            verdict: claim.verdict,
+            claimId: claim.id
+          });
+        }
+      }
+    } else if (matchedRef) {
+      const edgeDirectId = `edge-direct-${claim.id}-ref-${index}`;
+      if (!seenEdgeKeys.has(edgeDirectId)) {
+        seenEdgeKeys.add(edgeDirectId);
         edges.push({
-          id: `${matchedIng.name}-${matchedRef.id}`,
-          from: `ingredient-${matchedIng.name}`,
+          id: edgeDirectId,
+          from: claimId,
           to: `reference-${matchedRef.id}`,
           verdict: claim.verdict,
           claimId: claim.id
         });
       }
-    } else if (matchedRef) {
-      edges.push({
-        id: `${claimId}-${matchedRef.id}`,
-        from: claimId,
-        to: `reference-${matchedRef.id}`,
-        verdict: claim.verdict,
-        claimId: claim.id
-      });
     }
   });
 

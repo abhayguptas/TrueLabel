@@ -1,4 +1,5 @@
 import type { AnalyzeResult } from "@/lib/types";
+import { ExternalLink, CheckCircle2 } from "lucide-react";
 
 const labels = {
   india_reference: "Official Indian Standard",
@@ -24,10 +25,12 @@ export function IngredientReview({ result }: { result: AnalyzeResult }): React.R
               <p>{review.summary}</p>
               {review.source ? (
                 <a href={review.source.sourceUrl} target="_blank" rel="noreferrer">
-                  ↗ {review.source.publisher}: {review.source.title}
+                  <ExternalLink size={12} className="inline-icon" /> {review.source.publisher}: {review.source.title}
                 </a>
               ) : (
-                <span className="no-match-note">Disclosed on product back label.</span>
+                <span className="no-match-note">
+                  <CheckCircle2 size={11} className="inline-icon" /> Disclosed on product back label.
+                </span>
               )}
             </article>
           ))}

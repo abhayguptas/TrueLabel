@@ -1,6 +1,7 @@
 "use client";
 
 import type { AnalyzeResult } from "@/lib/types";
+import { AlertTriangle, CheckCircle2, Search, ShieldAlert, ShieldCheck, Info } from "lucide-react";
 
 export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React.ReactElement {
   const supported = result.claims.filter((c) => c.verdict === "supported");
@@ -49,7 +50,10 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
       <div className="verdict-highlights-grid">
         {contradicted.length > 0 || result.conflicts.length > 0 ? (
           <div className="highlight-card red-card">
-            <div className="card-badge">🚨 Contradiction / Exaggeration</div>
+            <div className="card-badge">
+              <AlertTriangle size={14} />
+              <span>Contradiction / Exaggeration</span>
+            </div>
             <strong>Front promises conflict with packaging facts:</strong>
             <ul>
               {contradicted.map((c) => (
@@ -68,7 +72,10 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
 
         {supported.length > 0 ? (
           <div className="highlight-card green-card">
-            <div className="card-badge">✅ Verified True</div>
+            <div className="card-badge">
+              <CheckCircle2 size={14} />
+              <span>Verified True</span>
+            </div>
             <strong>Substantiated by packaging disclosures:</strong>
             <ul>
               {supported.map((c) => (
@@ -80,9 +87,23 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
           </div>
         ) : null}
 
+        {result.personalContextCaution && (
+          <div className={`highlight-card ${result.personalContextCaution.verdict === "high" ? "red-card" : "green-card"}`}>
+            <div className="card-badge">
+              {result.personalContextCaution.verdict === "high" ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
+              <span>Personal Allergy &amp; Health Check</span>
+            </div>
+            <strong>{result.personalContextCaution.verdict === "high" ? "Allergy Trigger Detected" : "Personal Profile: All Clear"}</strong>
+            <p>{result.personalContextCaution.message}</p>
+          </div>
+        )}
+
         <div className="highlight-card amber-card">
-          <div className="card-badge">🔍 Formulation Insight</div>
-          <strong>Active Ingredients & Base Reality:</strong>
+          <div className="card-badge">
+            <Search size={14} />
+            <span>Formulation Insight</span>
+          </div>
+          <strong>Active Ingredients &amp; Base Reality:</strong>
           <p>
             {result.productCategory === "packaged food"
               ? "Check the first 3 ingredients: in food labels, ingredients are declared in descending order by weight. Anything listed first constitutes the bulk of what you eat."
@@ -103,7 +124,7 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
             <thead>
               <tr>
                 <th>Front Marketing Claim</th>
-                <th>Back-Label Facts & Scientific Findings</th>
+                <th>Back-Label Facts &amp; Scientific Findings</th>
                 <th>Verdict</th>
               </tr>
             </thead>
@@ -122,11 +143,19 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
                   </td>
                   <td className="verdict-cell">
                     <span className={`verdict-pill ${claim.verdict}`}>
-                      {claim.verdict === "supported"
-                        ? "Verified True"
-                        : claim.verdict === "contradicted"
-                        ? "Contradicted / Exaggerated"
-                        : "Unproven / Unstated"}
+                      {claim.verdict === "supported" ? (
+                        <>
+                          <CheckCircle2 size={12} className="inline-icon" /> Verified True
+                        </>
+                      ) : claim.verdict === "contradicted" ? (
+                        <>
+                          <AlertTriangle size={12} className="inline-icon" /> Contradicted / Exaggerated
+                        </>
+                      ) : (
+                        <>
+                          <Info size={12} className="inline-icon" /> Unproven / Unstated
+                        </>
+                      )}
                     </span>
                   </td>
                 </tr>
@@ -138,4 +167,3 @@ export function TruthVerdictBanner({ result }: { result: AnalyzeResult }): React
     </section>
   );
 }
-
