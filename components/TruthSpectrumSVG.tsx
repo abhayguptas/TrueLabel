@@ -41,13 +41,12 @@ export function TruthSpectrumSVG({
     !result.references.length ? "No cited sources" : ""
   ].filter(Boolean);
 
-  const maxRows = Math.max(
-    nodes.filter((n) => n.column === 0).length,
-    nodes.filter((n) => n.column === 1).length,
-    nodes.filter((n) => n.column === 2).length,
-    4
+  // Dynamically calculate height from the lowest card + generous 40px margin so no card is ever cut off
+  const maxY = Math.max(
+    ...Array.from(nodeMap.values()).map((item) => item.y + 40),
+    420
   );
-  const svgHeight = Math.max(480, 80 + maxRows * 95);
+  const svgHeight = maxY + 40;
 
   return (
     <section className="spectrum">

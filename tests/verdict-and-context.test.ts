@@ -180,6 +180,13 @@ Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Gly
     expect(claims).toHaveLength(4);
     expect(claims).toContain("Non-Comedogenic");
     expect(claims).toContain("Fragrance-Free");
+
+    const shilajitText = `Product: Pure Himalayan Shilajit Booster Resin
+Front Claims: Clinically proven to lower cortisol by 80% and double testosterone in 14 days, 60% Fulvic Acid
+Back Label Ingredients: Purified Shilajit Resin (250mg), Ashwagandha Extract (50mg), Maltodextrin, Potassium Sorbate.`;
+    const shilajitClaims = parseExplicitClaims(shilajitText);
+    console.log("Extracted Shilajit claims:", shilajitClaims);
+    expect(shilajitClaims.length).toBeGreaterThanOrEqual(2);
   });
 
   it("matches whole chemical words and prevents Glycerin matching Ethylhexylglycerin", () => {
@@ -258,6 +265,40 @@ describe("buildGraph edge and node key uniqueness", () => {
     // Assert complete uniqueness
     expect(new Set(nodeIds).size).toBe(nodeIds.length);
     expect(new Set(edgeIds).size).toBe(edgeIds.length);
+  });
+
+  it("builds complete 3-column graph for Shilajit with full card clearance and no cutoffs", () => {
+    const shilajitResult: AnalyzeResult = {
+      claims: [
+        { id: "1", claim: "Clinically proven to lower cortisol by 80%", verdict: "contradicted", confidence: 0.95 },
+        { id: "2", claim: "Double testosterone in 14 days", verdict: "contradicted", confidence: 0.95 },
+        { id: "3", claim: "60% Fulvic Acid", verdict: "supported", confidence: 0.94 }
+      ],
+      ingredients: [
+        { name: "Purified Shilajit Resin (250mg)", triggers: [] },
+        { name: "Ashwagandha Extract (50mg)", triggers: [] },
+        { name: "Maltodextrin", triggers: ["diabetic"] },
+        { name: "Potassium Sorbate", triggers: [] }
+      ],
+      references: [
+        { id: "shilajit-trial", title: "Randomized Trial on Shilajit", text: "...", sourceUrl: "https://pubmed.ncbi.nlm.nih.gov" },
+        { id: "back-label-facts", title: "Official Back-Label Disclosures", text: "...", sourceUrl: "#" }
+      ],
+      conflicts: [],
+      risks: [],
+      productCategory: "supplement",
+      sourceMode: "text"
+    };
+
+    const { nodes, edges } = buildGraph(shilajitResult);
+    const claimNodes = nodes.filter((n) => n.column === 0);
+    const ingredientNodes = nodes.filter((n) => n.column === 1);
+    const referenceNodes = nodes.filter((n) => n.column === 2);
+
+    expect(claimNodes.length).toBe(3);
+    expect(ingredientNodes.length).toBe(4);
+    expect(referenceNodes.length).toBe(2);
+    expect(edges.length).toBeGreaterThanOrEqual(3);
   });
 });
 

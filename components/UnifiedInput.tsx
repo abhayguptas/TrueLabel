@@ -27,7 +27,7 @@ Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Gly
     label: "Shilajit Booster (80% Cortisol Drop Claim)",
     icon: Zap,
     query: `Product: Pure Himalayan Shilajit Booster Resin
-Front Claims: Clinically proven to lower cortisol by 80% and double testosterone in 14 days, 60% Fulvic Acid
+Front Claims: Clinically proven to lower cortisol by 80%, Double testosterone in 14 days, 60% Fulvic Acid
 Back Label Ingredients: Purified Shilajit Resin (250mg), Ashwagandha Extract (50mg), Maltodextrin, Potassium Sorbate.`,
     context: "Hormone sensitivity, check clinical dose vs effective dose"
   },
