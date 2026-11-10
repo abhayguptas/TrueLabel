@@ -23,7 +23,7 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 1. It accepts optional personal context, such as an allergy, a condition, a symptom, or an ingredient to avoid, without turning that context into a diagnosis.
 2. It screens untrusted label content for instruction injection and personal information.
 3. It resolves public YouTube URLs to an English caption transcript before the security and Clocked stages. Instagram and TikTok URLs receive a paste-transcript message because their public caption reads are unreliable.
-4. It extracts the stated claims, ingredients, product dose, and category directly from text or label images. Text-only results are checked against the submitted text before they become label facts.
+4. It extracts the stated claims, ingredients, product dose, and category directly from text or label images. With two images, the front label supplies claims and the back label supplies the complete ingredient list. Text-only results are checked against the submitted text before they become label facts.
 5. It searches each verified back-label ingredient against a curated catalog first. When local matching is weak, it calls the live PubMed E-utilities API, then supplies applicable India-focused and FDA baselines before Clocked source selection.
 6. It compares isolated claims with the most relevant single source clause instead of treating a long document as a single claim.
 6. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
@@ -238,7 +238,7 @@ Returns the server health state, API-key availability, catalog size, and the `li
 - Optional personal context is capped at 1,000 characters. The interface asks users not to enter names, contact details, medical records, or other identifying information.
 - Personal context is sent only to the live analysis route for its stated educational label check. Direct identifiers returned by Protect are removed before it reaches Rerank or Decide; self-reported condition language is used only for the requested caution assessment.
 - The interface permits two source images. It compresses them client-side to Clocked's aggregate image budget before upload.
-- Text that contains detected PII is transformed before later text processing. Image input that appears to contain personal data is blocked because native image analysis cannot safely redact pixels for downstream use. Safety-event payloads expose types and counts, not detected identifier values.
+- Text that contains detected PII is transformed before later text processing. Image input with financial, government, medical, prescription, or date-of-birth identifiers is blocked because native image analysis cannot safely redact pixels for downstream use. Standard manufacturer email, phone, and postal details on product packaging remain scannable. Safety-event payloads expose types and counts, not detected identifier values.
 - Cached data is limited to successful, sanitized text-derived responses. Protect requests, optional personal-context requests, and image-derived content are not written to the local disk cache.
 - Vercel server filesystems are ephemeral. The in-memory cache and rate limiter are instance-local by design because this project has no external database.
 

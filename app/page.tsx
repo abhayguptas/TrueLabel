@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClaimLedger } from "@/components/ClaimLedger";
 import { HeaderBar } from "@/components/HeaderBar";
 import { IngredientReview } from "@/components/IngredientReview";
@@ -29,6 +29,8 @@ export default function Home(): React.ReactElement {
   const [events, setEvents] = useState<PipelineEvent[]>([]);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const scanLock = useRef(false);
   const [selectedClaim, setSelectedClaim] = useState<string | null>(null);
   useEffect(() => {
     const saved = localStorage.getItem("truelabel_sensitivities");
@@ -37,6 +39,9 @@ export default function Home(): React.ReactElement {
   }, []);
   const updateSensitivities = (value: SensitivityKey[]) => { setSensitivities(value); localStorage.setItem("truelabel_sensitivities", JSON.stringify(value)); };
   const scan = async (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => {
+    if (scanLock.current) return;
+    scanLock.current = true;
+    setScanning(true);
     setEvents([]);
     setResult(null);
     setError("");
@@ -67,8 +72,11 @@ export default function Home(): React.ReactElement {
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The live scan could not be completed.");
+    } finally {
+      scanLock.current = false;
+      setScanning(false);
     }
   };
   const focusClaim = (id: string) => { setSelectedClaim(id); document.getElementById(`claim-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); };
-  return <main id="top"><HeaderBar /><div className="shell"><SensitivityPills selected={sensitivities} onChange={updateSensitivities} />{ready && !available && <section className="key-notice"><strong>Live scans are locked.</strong><span>Create <code>.env.local</code>, add <code>CLOCKED_API_KEY</code>, then restart <code>pnpm dev</code>. TrueLabel does not show simulated analysis.</span></section>}<UnifiedInput disabled={!available} onSubmit={scan} />{error && <section className="scan-error" role="alert">{error}</section>}<PipelineStreamBar events={events} />{result && <div className="results"><TruthSpectrumSVG result={result} onClaimSelect={focusClaim} /><IngredientReview result={result} /><div className="three-panels"><PersonalRiskCard result={result} /><RegionalAndLabelDiff result={result} /><TruthBadgeCard result={result} /></div><ClaimLedger result={result} selectedClaim={selectedClaim} /></div>}<footer><span>TrueLabel reads product claims against selected evidence. It does not diagnose, prescribe, or replace professional care.</span><span>Live scans are powered by Clocked.</span></footer></div></main>;
+  return <main id="top"><HeaderBar /><div className="shell"><SensitivityPills selected={sensitivities} onChange={updateSensitivities} />{ready && !available && <section className="key-notice"><strong>Live scans are locked.</strong><span>Create <code>.env.local</code>, add <code>CLOCKED_API_KEY</code>, then restart <code>pnpm dev</code>. TrueLabel does not show simulated analysis.</span></section>}<UnifiedInput disabled={!available} scanning={scanning} onSubmit={scan} />{error && <section className="scan-error" role="alert">{error}</section>}<PipelineStreamBar events={events} />{result && <div className="results"><TruthSpectrumSVG result={result} onClaimSelect={focusClaim} /><IngredientReview result={result} /><div className="three-panels"><PersonalRiskCard result={result} /><RegionalAndLabelDiff result={result} /><TruthBadgeCard result={result} /></div><ClaimLedger result={result} selectedClaim={selectedClaim} /></div>}<footer><span>TrueLabel reads product claims against selected evidence. It does not diagnose, prescribe, or replace professional care.</span><span>Live scans are powered by Clocked.</span></footer></div></main>;
 }

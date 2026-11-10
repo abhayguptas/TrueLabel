@@ -3,7 +3,7 @@ import { cacheKey } from "../lib/content-cache";
 import { consumeLiveScan, resetRateLimits } from "../lib/rate-limiter";
 import { unicodeSlice } from "../lib/unicode-slice";
 import { extractYouTubeId, isUnsupportedVideoUrl } from "../lib/youtube-resolver";
-import { isTestableClaim } from "../lib/pipeline-runner";
+import { isBlockingImageEntity, isTestableClaim } from "../lib/pipeline-runner";
 
 describe("unicodeSlice", () => {
   it("uses Unicode code point offsets", () => {
@@ -42,6 +42,17 @@ describe("claim gate", () => {
     expect(isTestableClaim("Since 1993")).toBe(false);
     expect(isTestableClaim("Delicious classic recipe")).toBe(false);
     expect(isTestableClaim("Advanced multi vitamins")).toBe(false);
+  });
+});
+
+describe("image privacy gate", () => {
+  it("blocks only direct personal identifiers, not ordinary package facts", () => {
+    expect(isBlockingImageEntity({ type: "email" })).toBe(false);
+    expect(isBlockingImageEntity({ type: "prescription" })).toBe(true);
+    expect(isBlockingImageEntity({ type: "phone" })).toBe(false);
+    expect(isBlockingImageEntity({ type: "brand_name" })).toBe(false);
+    expect(isBlockingImageEntity({ type: "regulatory_license" })).toBe(false);
+    expect(isBlockingImageEntity({ type: "nutrition_fact" })).toBe(false);
   });
 });
 

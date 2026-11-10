@@ -107,7 +107,7 @@ function ingredientReviews(ingredients: IngredientResult[]): IngredientReview[] 
 function claimType(value: string): ClaimResult["claimType"] {
   const text = normalized(value);
   if (/\b\d+(?:\.\d+)?\s*(?:%|g|mg|mcg|µg|kcal|kj|iu|ml)\b|\b(fibre|fiber|protein|sugar|fat|sodium|calorie|vitamin|mineral)\b/.test(text)) return "nutrition";
-  if (/\b(no|free from|without|contains|made with|added)\b/.test(text)) return "ingredient";
+  if (/\b(no|free from|without|contains|made with|added)\b|\b[a-z]+\s+free\b/.test(text)) return "ingredient";
   if (/\b(reduce|reduces|reduced|support|supports|improve|improves|lighten|lightens|remove|removes|protect|protects|prevent|prevents|treat|treats|boost|boosts|control|controls|fight|fights|visible)\b/.test(text)) return "functional";
   return "other";
 }
@@ -182,21 +182,25 @@ function regulatoryContradiction(claim: string, document: ReferenceDocument | un
 }
 
 function normalizeClaims(grounding: Record<string, unknown>, fallback: string[], references: ReferenceDocument[], sourceMode: AnalyzeResult["sourceMode"]): ClaimResult[] {
+  if (!fallback.length) return [];
   const claims = Array.isArray(grounding.claims) ? grounding.claims : [];
-  const normalized = claims.map((item, index) => {
+  const normalized = claims.flatMap((item, index) => {
     const claim = record(item);
     const evidence = record(claim.evidence);
+    const returnedClaim = String(claim.claim ?? "");
+    const matchingClaim = fallback.find((candidate) => appearsInSource(returnedClaim, candidate) || appearsInSource(candidate, returnedClaim));
+    if (!matchingClaim) return [];
     const documentId = typeof evidence.document === "string" ? evidence.document : undefined;
     const rawVerdict = verdict(claim.verdict);
-    return {
+    return [{
       id: String(index),
-      claim: String(claim.claim ?? fallback[index] ?? "Claim not disclosed"),
-      claimType: claimType(String(claim.claim ?? fallback[index] ?? "")),
+      claim: matchingClaim,
+      claimType: claimType(matchingClaim),
       sourceImage: sourceMode === "image" ? 0 : undefined,
-      verdict: rawVerdict === "supported" && regulatoryContradiction(String(claim.claim ?? fallback[index] ?? ""), references.find((document) => document.id === documentId)) ? "contradicted" : rawVerdict,
+      verdict: rawVerdict === "supported" && regulatoryContradiction(matchingClaim, references.find((document) => document.id === documentId)) ? "contradicted" : rawVerdict,
       confidence: numeric(claim.supported ?? claim.confidence ?? claim.grounded),
       evidence: typeof evidence.quote === "string" ? { text: evidence.quote, start: typeof evidence.start === "number" ? evidence.start : undefined, end: typeof evidence.end === "number" ? evidence.end : undefined, confidence: numeric(evidence.confidence), documentId } : undefined
-    };
+    }];
   });
   return normalized.length ? normalized : fallback.map((claim, index) => ({ id: String(index), claim, claimType: claimType(claim), sourceImage: sourceMode === "image" ? 0 : undefined, verdict: "not_stated", confidence: 0 }));
 }
@@ -219,6 +223,11 @@ function cautionFromAnswer(answer: Record<string, unknown>, message: string): Ca
 function safetySummary(response: Record<string, unknown>): Record<string, unknown> {
   const entities = Array.isArray(response.entities) ? response.entities : Array.isArray(record(response.result).entities) ? record(response.result).entities as unknown[] : [];
   return { verdict: response.verdict, category: response.category, injection: response.injection, threshold: response.threshold, entityCount: entities.length, entityTypes: entities.map((entity) => String(record(entity).type ?? "unknown")) };
+}
+
+export function isBlockingImageEntity(value: unknown): boolean {
+  const type = String(record(value).type ?? "").toLowerCase();
+  return /bank|account|credit.?card|debit.?card|passport|aadhaar|aadhar|pan.?number|social.?security|medical.?record|prescription|date.?of.?birth/.test(type);
 }
 
 function redactPersonalContext(text: string, response: Record<string, unknown>): string {
@@ -252,9 +261,9 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     safePersonalContext = redactPersonalContext(safePersonalContext, personalProtect.data);
   }
   if (hasImages) {
-    const imageProtect = await clocked<Record<string, unknown>>("pii", { images, instructions: "Find personal identifiers on product-label images." }, { cache: false });
-    const entities: unknown[] = Array.isArray(record(imageProtect.data.result).entities) ? record(imageProtect.data.result).entities as unknown[] : [];
-    if (entities.length) throw new ClockedError(422, "The uploaded image may contain personal information. Upload a label without personal stickers or names.", false);
+    const imageProtect = await clocked<Record<string, unknown>>("pii", { images, instructions: "Find high-risk personal identifiers on product-label images: financial account or card numbers, government identifiers, medical records, prescription details, or dates of birth. Business email addresses, business phone numbers, business postal addresses, brand names, company names, product names, ingredient names, nutrition facts, product dates, batch codes, barcodes, logos, and regulatory license numbers are ordinary packaging copy and must not block analysis." }, { cache: false });
+    const entities: unknown[] = Array.isArray(imageProtect.data.entities) ? imageProtect.data.entities as unknown[] : Array.isArray(record(imageProtect.data.result).entities) ? record(imageProtect.data.result).entities as unknown[] : [];
+    if (entities.some(isBlockingImageEntity)) throw new ClockedError(422, "The uploaded image appears to contain a high-risk personal identifier. Upload a label without financial, government, medical, or prescription details.", false);
     protectSummaries.push(safetySummary(imageProtect.data));
   }
   const guards: Record<string, unknown>[] = [];
@@ -287,15 +296,7 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const structuredText = hasImages ? imageValue(fill.data) : flattenedFields(fill.data);
   yield { stage: "fill", payload: { response: fill.data, cached: fill.cached } };
 
-  const extractPayload = hasImages ? {
-    images,
-    instructions: "Read the visible product label exactly. Extract ingredient names, serving dose, and only testable claims. A testable claim is a quantified nutrition or dose statement, ingredient presence or absence, or functional or physiological benefit. Exclude dates, heritage statements, brand names, slogans, taste descriptions, awards, generic adjectives, and product-category labels.",
-    fields: {
-      claims: { description: "verbatim testable front-label claim only", list: true, max_items: 8 },
-      ingredients: { description: "ingredient name", list: true, max_items: 32 },
-      product_dose: { description: "serving dose including units" }
-    }
-  } : {
+  const extractPayload = {
     text: safeText,
     instructions: "Extract verbatim ingredient names, serving dose, and only testable nutrition, ingredient, functional, or physiological claims from the submitted label text. Exclude dates, slogans, brands, awards, and generic adjectives.",
     fields: {
@@ -304,11 +305,25 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
       product_dose: { description: "serving dose including units" }
     }
   };
-  const extract = await clocked<Record<string, unknown>>("extract", extractPayload, { cache: !hasImages });
+  const imageIngredientPayload = request.backImageBase64 ?? request.frontImageBase64;
+  const imageClaimPayload = request.frontImageBase64 ?? request.backImageBase64;
+  const extract = hasImages ? await clocked<Record<string, unknown>>("extract", {
+    images: imageIngredientPayload ? [imageIngredientPayload] : [],
+    instructions: "This is the back label when both images were supplied. Read only the complete list under the Ingredients heading. Extract each ingredient from that list and the stated serving dose if present. Do not use front-label hero ingredients, with-statements, free-from statements, directions, warnings, manufacturer details, or marketing copy as ingredients.",
+    fields: {
+      ingredients: { description: "exact ingredient from the complete Ingredients list", list: true, max_items: 32 },
+      product_dose: { description: "serving dose including units" }
+    }
+  }, { cache: false }) : await clocked<Record<string, unknown>>("extract", extractPayload, { cache: true });
+  const claimExtract = hasImages ? await clocked<Record<string, unknown>>("extract", {
+    images: imageClaimPayload ? [imageClaimPayload] : [],
+    instructions: "This is the front label when both images were supplied. Extract only exact testable front-label claims: quantified nutrition or dose statements, ingredient presence or absence, or functional or physiological benefit claims. Exclude dates, heritage statements, brand names, slogans, taste descriptions, awards, generic adjectives, product-category labels, net weight, and directions.",
+    fields: { claims: { description: "verbatim testable front-label claim only", list: true, max_items: 8 } }
+  }, { cache: false }) : extract;
   const ingredients = normalizeIngredients(extract.data, sourceMode, safeText);
-  yield { stage: "extract", payload: { response: extract.data, ingredients } };
+  yield { stage: "extract", payload: { response: hasImages ? { ingredients: extract.data, claims: claimExtract.data } : extract.data, ingredients } };
 
-  const extractedClaims = fieldValues(extract.data, "claims");
+  const extractedClaims = fieldValues(claimExtract.data, "claims");
   const claims = verifiedClaims(extractedClaims, sourceMode, safeText);
   const category = productCategory(fill.data);
   const retrievalQuery = [safeText || structuredText, ingredients.map((ingredient) => ingredient.name).join(", ")].filter(Boolean).join("\n");

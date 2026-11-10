@@ -35,7 +35,7 @@ async function compressImage(file: File): Promise<string> {
   return result;
 }
 
-export function UnifiedInput({ disabled, onSubmit }: { disabled: boolean; onSubmit: (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => void }): React.ReactElement {
+export function UnifiedInput({ disabled, scanning, onSubmit }: { disabled: boolean; scanning: boolean; onSubmit: (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => void }): React.ReactElement {
   const [query, setQuery] = useState("");
   const [personalContext, setPersonalContext] = useState("");
   const [front, setFront] = useState<string | null>(null);
@@ -58,6 +58,7 @@ export function UnifiedInput({ disabled, onSubmit }: { disabled: boolean; onSubm
     }
   };
   const submit = () => {
+    if (scanning) return;
     if (!query.trim() && !front && !back) return setError("Add product text or at least one label photo.");
     if (front && back && ((front.length + back.length - front.indexOf(",") - back.indexOf(",") - 2) * 0.75 > 2400000)) return setError("The compressed label images are still too large. Choose smaller source images.");
     onSubmit({ query, personalContext, frontImageBase64: front, backImageBase64: back });
@@ -67,8 +68,8 @@ export function UnifiedInput({ disabled, onSubmit }: { disabled: boolean; onSubm
     <textarea value={query} onChange={(event) => setQuery(event.target.value)} maxLength={15000} placeholder="Paste product claims, a back-label ingredient list, or a YouTube Short or video ad link." aria-label="Product text" />
     <p className="source-help">YouTube videos with public English captions are resolved live. Instagram and TikTok links require a pasted transcript.</p>
     <div className="context-field"><label htmlFor="personal-context">Optional personal context</label><textarea id="personal-context" value={personalContext} onChange={(event) => setPersonalContext(event.target.value)} maxLength={1000} placeholder="For example: fragrance allergy, acne-prone skin, diabetes, or a specific ingredient you avoid. Do not include your name, contact details, or medical records." aria-describedby="personal-context-note" /><p id="personal-context-note">Used only to check label ingredients for a potential educational caution. It cannot diagnose a condition or determine whether a product is safe for you.</p></div>
-    <div className="upload-row"><input ref={frontRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => selectImage(event.target.files?.[0], "front")} /><input ref={backRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => selectImage(event.target.files?.[0], "back")} /><button type="button" className="upload-button" onClick={() => frontRef.current?.click()}>{front ? "Replace front label" : "Upload front label"}</button><button type="button" className="upload-button" onClick={() => backRef.current?.click()}>{back ? "Replace back label" : "Upload back label"}</button>{front && <span className="file-ready">Front ready</span>}{back && <span className="file-ready">Back ready</span>}</div>
+    <div className="upload-row"><input ref={frontRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={scanning} onChange={(event) => selectImage(event.target.files?.[0], "front")} /><input ref={backRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={scanning} onChange={(event) => selectImage(event.target.files?.[0], "back")} /><button type="button" className="upload-button" disabled={scanning} onClick={() => frontRef.current?.click()}>{front ? "Replace front label" : "Upload front label"}</button><button type="button" className="upload-button" disabled={scanning} onClick={() => backRef.current?.click()}>{back ? "Replace back label" : "Upload back label"}</button>{front && <span className="file-ready">Front ready</span>}{back && <span className="file-ready">Back ready</span>}</div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="input-footer"><span>{query.length.toLocaleString()} / 15,000 product characters · {personalContext.length.toLocaleString()} / 1,000 context characters</span><button type="button" className="scan-button" disabled={disabled} onClick={submit}>{disabled ? "Add API key to scan" : "Run live label scan"}</button></div>
+    <div className="input-footer"><span>{query.length.toLocaleString()} / 15,000 product characters · {personalContext.length.toLocaleString()} / 1,000 context characters</span><button type="button" className="scan-button" disabled={disabled || scanning} onClick={submit}>{scanning ? "Live scan running" : disabled ? "Add API key to scan" : "Run live label scan"}</button></div>
   </section>;
 }
