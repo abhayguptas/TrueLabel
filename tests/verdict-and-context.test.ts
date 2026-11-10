@@ -4,7 +4,8 @@ import {
   isTestableClaim,
   parseExplicitClaims,
   matchesIngredientTerm,
-  evaluateNegativeAssertion
+  evaluateNegativeAssertion,
+  cleanConflictText
 } from "../lib/pipeline-runner";
 import { synthesizeExecutiveVerdict } from "../lib/verdict-synthesizer";
 import { generateFullReportHtml } from "../lib/report-exporter";
@@ -299,6 +300,43 @@ describe("buildGraph edge and node key uniqueness", () => {
     expect(ingredientNodes.length).toBe(4);
     expect(referenceNodes.length).toBe(2);
     expect(edges.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("cleans raw LLM conflict prefixes and eliminates duplicate cards for the same claim", () => {
+    const rawLeft1 = 'Front Marketing Claim: "100% Natural Flavors"';
+    const rawRight1 = 'Back-Label Disclosed Additive: Flavour Enhancers (INS 621, INS 631).';
+    const rawRight2 = 'Packaging discloses synthetic artificial flavours and flavour enhancers.';
+
+    expect(cleanConflictText(rawLeft1)).toBe('100% Natural Flavors');
+    expect(cleanConflictText(rawRight1)).toBe('Flavour Enhancers (INS 621, INS 631).');
+    expect(cleanConflictText(rawRight2)).toBe('synthetic artificial flavours and flavour enhancers.');
+
+    // Simulate grouping by claim
+    const rawList = [
+      { left: rawLeft1, right: rawRight1, detail: "scope", confidence: 0.95 },
+      { left: rawLeft1, right: rawRight2, detail: "scope", confidence: 0.95 },
+      { left: 'Front Marketing Claim: "Uses Extra Virgin Olive Oil."', right: 'Back-Label Disclosed Oil: Vegetable Oil (Palm Oil).', detail: "conflict", confidence: 0.95 }
+    ];
+
+    const conflictsByClaim = new Map<string, { left: string; right: string }>();
+    for (const c of rawList) {
+      const cleanLeft = cleanConflictText(c.left);
+      const cleanRight = cleanConflictText(c.right);
+      const normKey = cleanLeft.toLowerCase();
+      if (!conflictsByClaim.has(normKey)) {
+        conflictsByClaim.set(normKey, { left: cleanLeft, right: cleanRight });
+      } else {
+        const existing = conflictsByClaim.get(normKey)!;
+        existing.right = `${existing.right} ${cleanRight}`.trim();
+      }
+    }
+
+    const uniqueConflicts = Array.from(conflictsByClaim.values());
+    expect(uniqueConflicts.length).toBe(2);
+    expect(uniqueConflicts[0].left).toBe('100% Natural Flavors');
+    expect(uniqueConflicts[0].right).toContain('Flavour Enhancers');
+    expect(uniqueConflicts[0].right).toContain('synthetic artificial flavours');
+    expect(uniqueConflicts[1].left).toBe('Uses Extra Virgin Olive Oil.');
   });
 });
 

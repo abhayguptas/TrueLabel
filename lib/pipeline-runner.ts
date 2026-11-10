@@ -103,6 +103,14 @@ function appearsInSource(value: string, source: string): boolean {
   return false;
 }
 
+export function cleanConflictText(text: string): string {
+  return text
+    .replace(/^(?:Front\s*Marketing\s*Claim|Marketing\s*Claim|Claim):?\s*/i, "")
+    .replace(/^(?:Back-Label\s*Disclosed\s*(?:Additive|Flour|Oil|Ingredient|Fact)|Back-Label\s*Disclosed|Packaging\s*discloses?|Discloses?):?\s*/i, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+}
+
 function normalizeIngredients(extractResponse: Record<string, unknown>, sourceMode: AnalyzeResult["sourceMode"], sourceText: string): IngredientResult[] {
   const field = record(record(extractResponse.fields).ingredients);
   const items = Array.isArray(field.items) ? field.items : [];
@@ -1110,23 +1118,40 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
         rawKind.toLowerCase() === "scope"
           ? "Formulation Discrepancy"
           : rawKind.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const rawLeft = String(record(finding.a).quote ?? "Front label claim");
+      const rawRight = String(record(finding.b).quote ?? "Back label fact");
       return {
-        left: String(record(finding.a).quote ?? "Front label claim"),
-        right: String(record(finding.b).quote ?? "Back label fact"),
+        left: cleanConflictText(rawLeft),
+        right: cleanConflictText(rawRight),
         detail: kindLabel,
         confidence: numeric(finding.confidence) || 0.95
       };
     });
   });
 
-  // Deduplicate raw conflicts so identical sentences are never printed twice
-  const seenConflictPairs = new Set<string>();
-  const conflicts = rawConflicts.filter((c) => {
-    const key = `${c.left}::${c.right}`;
-    if (seenConflictPairs.has(key)) return false;
-    seenConflictPairs.add(key);
-    return true;
-  });
+  // Deduplicate and group conflicts by claim so multiple bullet cards are never rendered for the same claim
+  const conflictsByClaim = new Map<string, { left: string; right: string; detail: string; confidence: number }>();
+  for (const c of rawConflicts) {
+    const cleanLeft = cleanConflictText(c.left);
+    const cleanRight = cleanConflictText(c.right);
+    const normKey = cleanLeft.toLowerCase();
+
+    if (!conflictsByClaim.has(normKey)) {
+      conflictsByClaim.set(normKey, {
+        left: cleanLeft,
+        right: cleanRight,
+        detail: c.detail,
+        confidence: c.confidence
+      });
+    } else {
+      const existing = conflictsByClaim.get(normKey)!;
+      if (!existing.right.toLowerCase().includes(cleanRight.toLowerCase())) {
+        existing.right = `${existing.right} ${cleanRight}`.trim();
+      }
+    }
+  }
+
+  const conflicts = Array.from(conflictsByClaim.values());
 
   // Automatically append triggered personal sensitivities as active formula conflicts!
   if (safePersonalContext) {
@@ -1256,13 +1281,14 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
       product: statedDose || "Not disclosed",
       clinical: references.find((reference) => reference.tags.includes("dose"))?.text ?? "Standard serving benchmark"
     },
-    regionalDiff: (indiaFormulaMatch || usFormulaMatch || references.some((reference) => reference.tags.includes("regional")))
-      ? {
-          india: indiaFormulaMatch ? indiaFormulaMatch[1].trim() : "Dried Potatoes, Edible Vegetable Oil (Palmolein), Rice Flour, Wheat Starch, Emulsifier (INS 471), Maltodextrin, Salt.",
-          international: usFormulaMatch ? usFormulaMatch[1].trim() : "Dried potatoes, vegetable oil (corn, cottonseed, high oleic sunflower oil), degerminated corn flour, cornstarch, rice flour, maltodextrin, salt, wheat starch.",
-          summary: "India formula uses Edible Vegetable Oil (Palmolein) whereas US formulation uses High Oleic Sunflower and Corn Oil."
-        }
-      : undefined,
+    regionalDiff:
+      indiaFormulaMatch && usFormulaMatch
+        ? {
+            india: indiaFormulaMatch[1].trim(),
+            international: usFormulaMatch[1].trim(),
+            summary: "India formula uses Edible Vegetable Oil (Palmolein) whereas US formulation uses High Oleic Sunflower and Corn Oil."
+          }
+        : undefined,
     raw: {
       guard: guards.map(safetySummary),
       protect: protectSummaries,

@@ -1,18 +1,42 @@
 import type { AnalyzeResult } from "@/lib/types";
 import { AlertTriangle, CheckCircle2, Globe, Scale } from "lucide-react";
 
+export function cleanConflictText(text: string): string {
+  return text
+    .replace(/^(?:Front\s*Marketing\s*Claim|Marketing\s*Claim|Claim):?\s*/i, "")
+    .replace(/^(?:Back-Label\s*Disclosed\s*(?:Additive|Flour|Oil|Ingredient|Fact)|Back-Label\s*Disclosed|Packaging\s*discloses?|Discloses?):?\s*/i, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+}
+
 export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): React.ReactElement {
   // Only show dose block for ingestible supplements or pharmaceutical pills with stated dose
   const showsDose =
     result.productCategory === "supplement" &&
     Boolean(result.productDose?.product && result.productDose.product !== "Not disclosed");
 
-  // Deduplicate conflict items by claim and reality text
-  const cleanConflicts = Array.from(
-    new Map(
-      result.conflicts.map((c) => [`${c.left.trim()}::${c.right.trim()}`, c])
-    ).values()
-  );
+  // Deduplicate and group conflict items by clean claim text so no claim is repeated
+  const conflictsByClaim = new Map<string, typeof result.conflicts[number]>();
+  for (const c of result.conflicts) {
+    const cleanLeft = cleanConflictText(c.left);
+    const cleanRight = cleanConflictText(c.right);
+    const normKey = cleanLeft.toLowerCase();
+
+    if (!conflictsByClaim.has(normKey)) {
+      conflictsByClaim.set(normKey, {
+        ...c,
+        left: cleanLeft,
+        right: cleanRight
+      });
+    } else {
+      const existing = conflictsByClaim.get(normKey)!;
+      if (!existing.right.toLowerCase().includes(cleanRight.toLowerCase())) {
+        existing.right = `${existing.right} ${cleanRight}`.trim();
+      }
+    }
+  }
+
+  const cleanConflicts = Array.from(conflictsByClaim.values());
 
   return (
     <section className="panel comparison-panel">
@@ -61,7 +85,7 @@ export function RegionalAndLabelDiff({ result }: { result: AnalyzeResult }): Rea
               conflict.right.length > 220 ? `${conflict.right.slice(0, 220)}...` : conflict.right;
 
             return (
-              <div key={`${conflict.detail}-${index}`} className="conflict-item">
+              <div key={`${conflict.left}-${index}`} className="conflict-item">
                 <span className="conflict-tag">
                   <AlertTriangle size={12} className="inline-icon" /> {cleanDetail}
                 </span>
