@@ -1,0 +1,7 @@
+"use client";
+
+import type { AnalyzeResult } from "@/lib/types";
+
+export function ClaimLedger({ result, selectedClaim }: { result: AnalyzeResult; selectedClaim: string | null }): React.ReactElement {
+  return <section className="ledger"><div className="section-label"><span>Evidence ledger</span><span>Source-level findings</span></div><div className="ledger-list">{result.claims.map((claim) => <article id={`claim-${claim.id}`} key={claim.id} className={`claim-row ${selectedClaim === claim.id ? "focused" : ""}`}><div className={`verdict ${claim.verdict}`}>{claim.verdict.replace("_", " ")}</div><div><h3>{claim.claim}</h3><p>{claim.evidence?.text ?? "No matching source passage was returned for this claim."}</p>{claim.evidence?.documentId && <span className="mono">Source: {claim.evidence.documentId}</span>}</div><strong>{Math.round(claim.confidence * 100)}%</strong></article>)}</div><div className="reference-list">{result.references.map((reference) => <a key={reference.id} href={reference.sourceUrl} target="_blank" rel="noreferrer"><span>{reference.publisher}</span><strong>{reference.title}</strong><p>{reference.text}</p></a>)}</div></section>;
+}

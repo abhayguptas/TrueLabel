@@ -1,0 +1,13 @@
+node_modules
+.next
+.env.local
+.env
+.clocked_cache
+.pnpm-store
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+*.log
+plans
+*.plan.md
