@@ -21,6 +21,13 @@ function values(value: unknown): string[] {
   return typeof value === "string" ? [value] : [];
 }
 
+function fieldValues(response: Record<string, unknown>, fieldName: string): string[] {
+  const field = record(record(response.fields)[fieldName]);
+  const items = Array.isArray(field.items) ? field.items.map(record).map((item) => String(item.value ?? "")).filter(Boolean) : [];
+  if (items.length) return items;
+  return values(field.value ?? record(response.result)[fieldName]);
+}
+
 function numeric(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
@@ -97,11 +104,23 @@ function ingredientReviews(ingredients: IngredientResult[]): IngredientReview[] 
   });
 }
 
+function claimType(value: string): ClaimResult["claimType"] {
+  const text = normalized(value);
+  if (/\b\d+(?:\.\d+)?\s*(?:%|g|mg|mcg|µg|kcal|kj|iu|ml)\b|\b(fibre|fiber|protein|sugar|fat|sodium|calorie|vitamin|mineral)\b/.test(text)) return "nutrition";
+  if (/\b(no|free from|without|contains|made with|added)\b/.test(text)) return "ingredient";
+  if (/\b(reduce|reduces|reduced|support|supports|improve|improves|lighten|lightens|remove|removes|protect|protects|prevent|prevents|treat|treats|boost|boosts|control|controls|fight|fights|visible)\b/.test(text)) return "functional";
+  return "other";
+}
+
+export function isTestableClaim(value: string): boolean {
+  const text = normalized(value);
+  if (text.length < 5 || /\b(since|established|founded)\s+\d{4}\b/.test(text)) return false;
+  if (/^(new|improved|premium|delicious|tasty|original|classic|expert|advanced|natural|pure|quality|trusted|number one|no 1)\b/.test(text) && claimType(value) === "other") return false;
+  return claimType(value) !== "other";
+}
+
 function verifiedClaims(candidates: string[], sourceMode: AnalyzeResult["sourceMode"], sourceText: string): string[] {
-  const sourceBacked = sourceMode === "text" ? candidates.filter((claim) => appearsInSource(claim, sourceText)) : candidates;
-  if (sourceBacked.length) return sourceBacked;
-  if (sourceMode === "text" && sourceText.trim()) return [sourceText.trim().slice(0, 600)];
-  return [];
+  return (sourceMode === "text" ? candidates.filter((claim) => appearsInSource(claim, sourceText)) : candidates).filter(isTestableClaim);
 }
 
 function productCategory(fill: Record<string, unknown>): AnalyzeResult["productCategory"] {
@@ -162,7 +181,7 @@ function regulatoryContradiction(claim: string, document: ReferenceDocument | un
   return prohibitsRepresentation && topicMatch;
 }
 
-function normalizeClaims(grounding: Record<string, unknown>, fallback: string[], references: ReferenceDocument[]): ClaimResult[] {
+function normalizeClaims(grounding: Record<string, unknown>, fallback: string[], references: ReferenceDocument[], sourceMode: AnalyzeResult["sourceMode"]): ClaimResult[] {
   const claims = Array.isArray(grounding.claims) ? grounding.claims : [];
   const normalized = claims.map((item, index) => {
     const claim = record(item);
@@ -172,12 +191,14 @@ function normalizeClaims(grounding: Record<string, unknown>, fallback: string[],
     return {
       id: String(index),
       claim: String(claim.claim ?? fallback[index] ?? "Claim not disclosed"),
+      claimType: claimType(String(claim.claim ?? fallback[index] ?? "")),
+      sourceImage: sourceMode === "image" ? 0 : undefined,
       verdict: rawVerdict === "supported" && regulatoryContradiction(String(claim.claim ?? fallback[index] ?? ""), references.find((document) => document.id === documentId)) ? "contradicted" : rawVerdict,
       confidence: numeric(claim.supported ?? claim.confidence ?? claim.grounded),
       evidence: typeof evidence.quote === "string" ? { text: evidence.quote, start: typeof evidence.start === "number" ? evidence.start : undefined, end: typeof evidence.end === "number" ? evidence.end : undefined, confidence: numeric(evidence.confidence), documentId } : undefined
     };
   });
-  return normalized.length ? normalized : fallback.map((claim, index) => ({ id: String(index), claim, verdict: "not_stated", confidence: 0 }));
+  return normalized.length ? normalized : fallback.map((claim, index) => ({ id: String(index), claim, claimType: claimType(claim), sourceImage: sourceMode === "image" ? 0 : undefined, verdict: "not_stated", confidence: 0 }));
 }
 
 function normalizeRisks(decide: Record<string, unknown>, ingredients: IngredientResult[], sensitivities: SensitivityKey[]): RiskResult[] {
@@ -245,18 +266,18 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
 
   const fillPayload = hasImages ? {
     images,
-    instructions: "Read the product label. Identify verbatim front-label claims, a concise ingredient list, product dose, and product category.",
+    instructions: "Read the product label. Extract only exact, testable front-label statements: quantified nutrition or dose statements, ingredient presence or absence, and functional or physiological benefit claims. Exclude dates, heritage statements, brand names, slogans, taste descriptions, awards, generic adjectives, and product-category labels.",
     fields: {
-      claims: { type: "extract", description: "front-label marketing claims", list: true, max_items: 8, infer: false },
+      claims: { type: "extract", description: "verbatim testable claims only; exclude dates, slogans, brands, awards, and generic adjectives", list: true, max_items: 8, infer: false },
       ingredients: { type: "extract", description: "ingredient names", list: true, max_items: 32, infer: false },
       product_dose: { type: "extract", description: "serving dose including units", infer: false },
       product_category: { type: "choice", description: "product category", options: ["supplement", "packaged food", "skincare", "unknown"] }
     }
   } : {
     text: safeText,
-    instructions: "Read the product text exactly. Extract only stated label claims and ingredients. Do not invent missing label facts.",
+    instructions: "Read the product text exactly. Extract only stated, testable nutrition, ingredient, functional, or physiological claims and ingredients. Exclude dates, slogans, brands, awards, and generic adjectives. Do not invent missing label facts.",
     fields: {
-      claims: { type: "extract", description: "marketing claims", list: true, max_items: 8, infer: false },
+      claims: { type: "extract", description: "verbatim testable nutrition, ingredient, functional, or physiological claims only", list: true, max_items: 8, infer: false },
       ingredients: { type: "extract", description: "ingredient names", list: true, max_items: 32, infer: false },
       product_dose: { type: "extract", description: "serving dose including units", infer: false },
       product_category: { type: "choice", description: "product category", options: ["supplement", "packaged food", "skincare", "unknown"] }
@@ -268,15 +289,17 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
 
   const extractPayload = hasImages ? {
     images,
-    instructions: "Read the visible product label exactly. Extract ingredient names and serving dose. Do not infer ingredients that are not shown.",
+    instructions: "Read the visible product label exactly. Extract ingredient names, serving dose, and only testable claims. A testable claim is a quantified nutrition or dose statement, ingredient presence or absence, or functional or physiological benefit. Exclude dates, heritage statements, brand names, slogans, taste descriptions, awards, generic adjectives, and product-category labels.",
     fields: {
+      claims: { description: "verbatim testable front-label claim only", list: true, max_items: 8 },
       ingredients: { description: "ingredient name", list: true, max_items: 32 },
       product_dose: { description: "serving dose including units" }
     }
   } : {
     text: safeText,
-    instructions: "Extract verbatim ingredient names and serving dose from the submitted label text.",
+    instructions: "Extract verbatim ingredient names, serving dose, and only testable nutrition, ingredient, functional, or physiological claims from the submitted label text. Exclude dates, slogans, brands, awards, and generic adjectives.",
     fields: {
+      claims: { description: "verbatim testable claim only", list: true, max_items: 8 },
       ingredients: { description: "ingredient name", list: true, max_items: 32 },
       product_dose: { description: "serving dose including units" }
     }
@@ -285,7 +308,7 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const ingredients = normalizeIngredients(extract.data, sourceMode, safeText);
   yield { stage: "extract", payload: { response: extract.data, ingredients } };
 
-  const extractedClaims = values(record(fill.data.fields).claims ? record(record(fill.data.fields).claims).value : record(fill.data.result).claims);
+  const extractedClaims = fieldValues(extract.data, "claims");
   const claims = verifiedClaims(extractedClaims, sourceMode, safeText);
   const category = productCategory(fill.data);
   const retrievalQuery = [safeText || structuredText, ingredients.map((ingredient) => ingredient.name).join(", ")].filter(Boolean).join("\n");
@@ -307,8 +330,8 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const references = rerankedReferences.length ? rerankedReferences : baselines;
   const rejectedReferences = candidates.filter((document) => !selectedIds.has(document.id)).slice(0, 5);
   const reviews = ingredientReviews(ingredients);
-  const evidenceStatus: AnalyzeResult["evidenceStatus"] = claims.length && localCandidates.length < 2 && !externalEvidence.sources.length ? "insufficient" : "grounded";
-  const evidenceMessage = evidenceStatus === "insufficient" ? `Insufficient clinical grounding. ${externalEvidence.status === "timeout" ? "The live PubMed search timed out" : "No matching clinical record was returned"}; applicable regulatory baselines remain available.` : "Evidence sources were selected from the catalog or live PubMed retrieval.";
+  const evidenceStatus: AnalyzeResult["evidenceStatus"] = !claims.length || (localCandidates.length < 2 && !externalEvidence.sources.length) ? "insufficient" : "grounded";
+  const evidenceMessage = !claims.length ? "No testable front-label claim was found. Dates, slogans, brands, and generic marketing language are intentionally excluded." : evidenceStatus === "insufficient" ? `Insufficient clinical grounding. ${externalEvidence.status === "timeout" ? "The live PubMed search timed out" : "No matching clinical record was returned"}; applicable regulatory baselines remain available.` : "Evidence sources were selected from the catalog or live PubMed retrieval.";
   yield { stage: "rerank", payload: { response: rerank.data, retrieval: { localCandidates: localCandidates.length, externalStatus: externalEvidence.status, externalSources: externalEvidence.sources.length, baselineSources: baselines.length }, selected: references.map((item) => ({ id: item.id, title: item.title, sourceUrl: item.sourceUrl })), rejected: rejectedReferences.map((item) => ({ id: item.id, title: item.title })), ingredientReviews: reviews } };
 
   const compareDocuments = [
@@ -344,7 +367,7 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     instructions: "Evaluate label information conservatively. Personal context may identify an allergy, condition, symptom, or ingredient preference. Results are educational label cautions, not medical advice, diagnosis, toxicity assessment, or a product safety guarantee.",
     questions: decideQuestions
   }, { cache: !hasImages && !safePersonalContext });
-  const normalizedClaims = normalizeClaims(grounding.data, claims, references);
+  const normalizedClaims = normalizeClaims(grounding.data, claims, references, sourceMode);
   const risks = normalizeRisks(decide.data, ingredients, request.sensitivities);
   const decideAnswers = record(decide.data.answers);
   const overallMessage = ingredients.length ? "Live review of disclosed ingredients, label claims, and cited evidence." : "No verified ingredient list was found. This reflects claim or disclosure uncertainty, not a finding that the product is harmful.";

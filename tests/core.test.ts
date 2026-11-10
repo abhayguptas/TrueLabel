@@ -3,6 +3,7 @@ import { cacheKey } from "../lib/content-cache";
 import { consumeLiveScan, resetRateLimits } from "../lib/rate-limiter";
 import { unicodeSlice } from "../lib/unicode-slice";
 import { extractYouTubeId, isUnsupportedVideoUrl } from "../lib/youtube-resolver";
+import { isTestableClaim } from "../lib/pipeline-runner";
 
 describe("unicodeSlice", () => {
   it("uses Unicode code point offsets", () => {
@@ -30,6 +31,17 @@ describe("video input detection", () => {
     expect(extractYouTubeId("https://youtu.be/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
     expect(isUnsupportedVideoUrl("https://www.instagram.com/reel/example/")).toBe(true);
     expect(isUnsupportedVideoUrl("A product claim about skincare")).toBe(false);
+  });
+});
+
+describe("claim gate", () => {
+  it("keeps testable statements and rejects front-label noise", () => {
+    expect(isTestableClaim("28% daily fibre needs")).toBe(true);
+    expect(isTestableClaim("No palm oil")).toBe(true);
+    expect(isTestableClaim("Helps reduce visible blemishes")).toBe(true);
+    expect(isTestableClaim("Since 1993")).toBe(false);
+    expect(isTestableClaim("Delicious classic recipe")).toBe(false);
+    expect(isTestableClaim("Advanced multi vitamins")).toBe(false);
   });
 });
 

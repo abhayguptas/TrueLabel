@@ -27,6 +27,8 @@ export interface EvidenceSpan {
 export interface ClaimResult {
   id: string;
   claim: string;
+  claimType?: "nutrition" | "ingredient" | "functional" | "other";
+  sourceImage?: number;
   verdict: Verdict;
   confidence: number;
   evidence?: EvidenceSpan;

@@ -29,6 +29,10 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 6. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
 7. It evaluates selected sensitivity profiles and optional personal context against extracted ingredients as educational cautions, never as diagnoses or safety guarantees.
 
+### Claim-quality gate
+
+TrueLabel keeps only verbatim, testable front-label statements: quantified nutrition or dose disclosures, ingredient presence or absence, and functional or physiological benefit claims. It excludes dates, heritage language, brand names, slogans, awards, taste descriptions, generic adjectives, and product-category labels. Image-derived claims are marked as label-image evidence because text offsets are not reliable for an image. If no testable claim remains, the app reports that state and renders an inconclusive audit rather than a numeric truth score.
+
 ## Product capabilities
 
 | Area | Behavior |
