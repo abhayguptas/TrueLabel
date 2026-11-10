@@ -6,8 +6,8 @@ import type { PipelineEvent, PipelineStage } from "@/lib/types";
 const stages: Array<{ key: PipelineStage; label: string; endpoint: string }> = [
   { key: "guard_protect", label: "Sanitize input", endpoint: "/injection + /pii" },
   { key: "fill", label: "Structure label", endpoint: "/fill" },
-  { key: "rerank", label: "Match evidence", endpoint: "/rerank" },
   { key: "extract", label: "Extract facts", endpoint: "/extract" },
+  { key: "rerank", label: "Match evidence", endpoint: "/rerank" },
   { key: "compare", label: "Compare sources", endpoint: "/compare" },
   { key: "verify_decide", label: "Verify and assess", endpoint: "/grounding + /decide" }
 ];

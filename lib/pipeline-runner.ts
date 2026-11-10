@@ -1,6 +1,6 @@
 import catalogJson from "@/data/catalog.json";
 import { clocked, ClockedError } from "@/lib/clocked-client";
-import type { AnalyzeRequest, AnalyzeResult, CautionResult, ClaimResult, IngredientResult, PipelineEvent, ReferenceDocument, RiskResult, SensitivityKey, Verdict } from "@/lib/types";
+import type { AnalyzeRequest, AnalyzeResult, CautionResult, ClaimResult, IngredientResult, IngredientReview, PipelineEvent, ReferenceDocument, RiskResult, SensitivityKey, Verdict } from "@/lib/types";
 
 const catalog = catalogJson as ReferenceDocument[];
 const sensitivityLabels: Record<SensitivityKey, string> = {
@@ -54,7 +54,16 @@ function isIngredientTrigger(name: string, sensitivity: SensitivityKey): boolean
   return matches[sensitivity].some((trigger) => lower.includes(trigger));
 }
 
-function normalizeIngredients(extractResponse: Record<string, unknown>, sourceMode: AnalyzeResult["sourceMode"]): IngredientResult[] {
+function normalized(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function appearsInSource(value: string, source: string): boolean {
+  const needle = normalized(value);
+  return needle.length >= 3 && normalized(source).includes(needle);
+}
+
+function normalizeIngredients(extractResponse: Record<string, unknown>, sourceMode: AnalyzeResult["sourceMode"], sourceText: string): IngredientResult[] {
   const field = record(record(extractResponse.fields).ingredients);
   const items = Array.isArray(field.items) ? field.items : [];
   const fromItems = items.map((item) => record(item)).map((item) => ({
@@ -64,7 +73,7 @@ function normalizeIngredients(extractResponse: Record<string, unknown>, sourceMo
     end: typeof item.end === "number" ? item.end : undefined
   }));
   const result: Array<{ name: string; confidence: number; start?: number; end?: number }> = fromItems.length ? fromItems : values(record(extractResponse.result).ingredients).map((name) => ({ name, confidence: 0.7 }));
-  return result.filter((item) => item.name !== "Not disclosed").slice(0, 16).map((item) => ({
+  return result.filter((item) => item.name !== "Not disclosed" && (sourceMode !== "text" || appearsInSource(item.name, sourceText))).slice(0, 16).map((item) => ({
     ...item,
     start: sourceMode === "image" ? undefined : item.start,
     end: sourceMode === "image" ? undefined : item.end,
@@ -72,17 +81,51 @@ function normalizeIngredients(extractResponse: Record<string, unknown>, sourceMo
   }));
 }
 
-function normalizeClaims(grounding: Record<string, unknown>, fallback: string[]): ClaimResult[] {
+function ingredientReviews(ingredients: IngredientResult[]): IngredientReview[] {
+  return ingredients.map((ingredient) => {
+    const ingredientText = normalized(ingredient.name);
+    const matches = catalog.filter((document) => document.tags.some((tag) => {
+      const term = normalized(tag);
+      return term.length >= 3 && (ingredientText.includes(term) || term.includes(ingredientText));
+    }));
+    const indiaSource = matches.find((document) => /FSSAI|CDSCO|ICMR|ASCI/i.test(document.publisher));
+    const source = indiaSource ?? matches[0];
+    if (indiaSource) return { ingredient: ingredient.name, status: "india_reference", source, summary: `Matched to an India-focused ${indiaSource.publisher} reference. This is label or claim context, not a safety approval.` };
+    if (source) return { ingredient: ingredient.name, status: "reference", source, summary: `Matched to a cited ${source.publisher} reference for further review.` };
+    return { ingredient: ingredient.name, status: "no_match", summary: "No ingredient-specific catalog reference matched. The ingredient is disclosed, but this scan does not establish that it is safe or harmful." };
+  });
+}
+
+function verifiedClaims(candidates: string[], sourceMode: AnalyzeResult["sourceMode"], sourceText: string): string[] {
+  const sourceBacked = sourceMode === "text" ? candidates.filter((claim) => appearsInSource(claim, sourceText)) : candidates;
+  if (sourceBacked.length) return sourceBacked;
+  if (sourceMode === "text" && sourceText.trim()) return [sourceText.trim().slice(0, 600)];
+  return [];
+}
+
+function regulatoryContradiction(claim: string, document: ReferenceDocument | undefined): boolean {
+  if (!document || !/FSSAI|CDSCO|Advertising Standards Council of India/i.test(document.publisher)) return false;
+  const prohibitsRepresentation = /should not|must not|may not|false or misleading|not misleading/i.test(document.text);
+  const topicMatch = document.tags.some((tag) => {
+    const term = normalized(tag);
+    return term.length >= 4 && normalized(claim).includes(term);
+  });
+  return prohibitsRepresentation && topicMatch;
+}
+
+function normalizeClaims(grounding: Record<string, unknown>, fallback: string[], references: ReferenceDocument[]): ClaimResult[] {
   const claims = Array.isArray(grounding.claims) ? grounding.claims : [];
   const normalized = claims.map((item, index) => {
     const claim = record(item);
     const evidence = record(claim.evidence);
+    const documentId = typeof evidence.document === "string" ? evidence.document : undefined;
+    const rawVerdict = verdict(claim.verdict);
     return {
       id: String(index),
       claim: String(claim.claim ?? fallback[index] ?? "Claim not disclosed"),
-      verdict: verdict(claim.verdict),
+      verdict: rawVerdict === "supported" && regulatoryContradiction(String(claim.claim ?? fallback[index] ?? ""), references.find((document) => document.id === documentId)) ? "contradicted" : rawVerdict,
       confidence: numeric(claim.supported ?? claim.confidence ?? claim.grounded),
-      evidence: typeof evidence.quote === "string" ? { text: evidence.quote, start: typeof evidence.start === "number" ? evidence.start : undefined, end: typeof evidence.end === "number" ? evidence.end : undefined, confidence: numeric(evidence.confidence), documentId: typeof evidence.document === "string" ? evidence.document : undefined } : undefined
+      evidence: typeof evidence.quote === "string" ? { text: evidence.quote, start: typeof evidence.start === "number" ? evidence.start : undefined, end: typeof evidence.end === "number" ? evidence.end : undefined, confidence: numeric(evidence.confidence), documentId } : undefined
     };
   });
   return normalized.length ? normalized : fallback.map((claim, index) => ({ id: String(index), claim, verdict: "not_stated", confidence: 0 }));
@@ -174,18 +217,6 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const structuredText = hasImages ? imageValue(fill.data) : flattenedFields(fill.data);
   yield { stage: "fill", payload: { response: fill.data, cached: fill.cached } };
 
-  const rerank = await clocked<Record<string, unknown>>("rerank", {
-    query: safeText || structuredText,
-    documents: catalog.map((document) => ({ id: document.id, title: document.title, text: document.text, metadata: { category: document.category, region: document.region ?? "global", source: document.publisher } })),
-    instructions: "Select only sources that can substantively assess the product claims, ingredients, region, or personal sensitivity context.",
-    top_n: 8
-  }, { cache: !hasImages && !safePersonalContext });
-  const rankings = Array.isArray(rerank.data.results) ? rerank.data.results.map(record) : [];
-  const selectedIds = new Set(rankings.filter((entry) => entry.action === "use" || entry.action === "expand").map((entry) => String(entry.id)));
-  const references = catalog.filter((document) => selectedIds.has(document.id));
-  const rejectedReferences = catalog.filter((document) => !selectedIds.has(document.id)).slice(0, 5);
-  yield { stage: "rerank", payload: { response: rerank.data, selected: references.map((item) => ({ id: item.id, title: item.title, sourceUrl: item.sourceUrl })), rejected: rejectedReferences.map((item) => ({ id: item.id, title: item.title })) } };
-
   const extractPayload = hasImages ? {
     images,
     instructions: "Read the visible product label exactly. Extract ingredient names and serving dose. Do not infer ingredients that are not shown.",
@@ -202,10 +233,25 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     }
   };
   const extract = await clocked<Record<string, unknown>>("extract", extractPayload, { cache: !hasImages });
-  const ingredients = normalizeIngredients(extract.data, sourceMode);
+  const ingredients = normalizeIngredients(extract.data, sourceMode, safeText);
   yield { stage: "extract", payload: { response: extract.data, ingredients } };
 
-  const claims = values(record(fill.data.fields).claims ? record(record(fill.data.fields).claims).value : record(fill.data.result).claims);
+  const extractedClaims = values(record(fill.data.fields).claims ? record(record(fill.data.fields).claims).value : record(fill.data.result).claims);
+  const claims = verifiedClaims(extractedClaims, sourceMode, safeText);
+  const evidenceQuery = [safeText || structuredText, ingredients.length ? `Verified back-label ingredients: ${ingredients.map((ingredient) => ingredient.name).join(", ")}` : "No verified ingredient list was found.", "Prioritize applicable India-focused FSSAI, CDSCO, ICMR-NIN, and ASCI sources, then other cited primary sources."].join("\n\n");
+  const rerank = await clocked<Record<string, unknown>>("rerank", {
+    query: evidenceQuery,
+    documents: catalog.map((document) => ({ id: document.id, title: document.title, text: document.text, metadata: { category: document.category, region: document.region ?? "global", source: document.publisher } })),
+    instructions: "Select sources that substantively assess the verified label text, exact disclosed ingredients, region, or personal sensitivity context. Prefer India-focused official records where relevant. Do not select a source merely because it is broadly about a category.",
+    top_n: 8
+  }, { cache: !hasImages && !safePersonalContext });
+  const rankings = Array.isArray(rerank.data.results) ? rerank.data.results.map(record) : [];
+  const selectedIds = new Set(rankings.filter((entry) => entry.action === "use" || entry.action === "expand").map((entry) => String(entry.id)));
+  const references = catalog.filter((document) => selectedIds.has(document.id));
+  const rejectedReferences = catalog.filter((document) => !selectedIds.has(document.id)).slice(0, 5);
+  const reviews = ingredientReviews(ingredients);
+  yield { stage: "rerank", payload: { response: rerank.data, selected: references.map((item) => ({ id: item.id, title: item.title, sourceUrl: item.sourceUrl })), rejected: rejectedReferences.map((item) => ({ id: item.id, title: item.title })), ingredientReviews: reviews } };
+
   const compareDocuments = [
     { id: "label-claims", text: claims.join(". ") || safeText.slice(0, 1800) || structuredText.slice(0, 1800) },
     { id: "label-ingredients", text: ingredients.map((ingredient) => ingredient.name).join(", ") || structuredText.slice(0, 1800) },
@@ -226,7 +272,7 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     documents: groundingDocuments,
     answer: claims.join(". ") || safeText || structuredText,
     claims: claims.length ? claims : undefined,
-    instructions: "Assess whether each product marketing statement is supported, contradicted, or not stated by the supplied reference material. If the source document says that no catalog reference was selected, return not stated. Missing evidence is not proof of harm.",
+    instructions: "Assess whether each product marketing statement is supported, contradicted, or not stated by the supplied reference material. Treat a regulatory or advertising-code source that rejects, prohibits, or cautions against a matching representation as contradicting the product statement, not as support for it. If the source document says that no catalog reference was selected, return not stated. Missing evidence is not proof of harm.",
     evidence: "all",
     threshold: 0.65
   }, { cache: !hasImages && !safePersonalContext });
@@ -238,16 +284,18 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     instructions: "Evaluate label information conservatively. Personal context may identify an allergy, condition, symptom, or ingredient preference. Results are educational label cautions, not medical advice, diagnosis, toxicity assessment, or a product safety guarantee.",
     questions: decideQuestions
   }, { cache: !hasImages && !safePersonalContext });
-  const normalizedClaims = normalizeClaims(grounding.data, claims);
+  const normalizedClaims = normalizeClaims(grounding.data, claims, references);
   const risks = normalizeRisks(decide.data, ingredients, request.sensitivities);
   const decideAnswers = record(decide.data.answers);
-  const overallCaution = cautionFromAnswer(record(decideAnswers.overall_caution), "Live review of label disclosures, claims, and ingredients.");
+  const overallMessage = ingredients.length ? "Live review of disclosed ingredients, label claims, and cited evidence." : "No verified ingredient list was found. This reflects claim or disclosure uncertainty, not a finding that the product is harmful.";
+  const overallCaution = cautionFromAnswer(record(decideAnswers.overall_caution), overallMessage);
   const personalContextCaution = safePersonalContext ? cautionFromAnswer(record(decideAnswers.personal_context_caution), "Live ingredient review based on the optional context you supplied.") : undefined;
   const result: AnalyzeResult = {
     inputText: safeText || structuredText,
     sourceMode,
     claims: normalizedClaims,
     ingredients,
+    ingredientReviews: reviews,
     references,
     rejectedReferences,
     risks,

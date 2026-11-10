@@ -4,3 +4,8 @@
 .context-field p{margin:0;font-size:11px;line-height:1.45;color:#625f59}
 .overall-caution{background:var(--paper)}
 .no-reference{grid-column:1/-1;margin:0;border:1px solid var(--ink);padding:13px;background:var(--amber-bg);font-size:12px;line-height:1.45}
+.ingredient-review{margin-top:24px;border:1px solid var(--ink);padding:20px;background:var(--surface);box-shadow:3px 3px 0 var(--ink)}
+.ingredient-review-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--ink);border-left:1px solid var(--ink)}
+.ingredient-review-row{min-height:132px;padding:15px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--paper)}
+.ingredient-review-row>div{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.ingredient-review-row strong{font-size:14px}.ingredient-review-row span{font:500 10px "JetBrains Mono",monospace;text-transform:uppercase;color:var(--amber)}.ingredient-review-row.india_reference span{color:var(--green)}.ingredient-review-row p{margin:10px 0;font-size:12px;line-height:1.45}.ingredient-review-row a,.no-match-note{font:500 11px/1.4 "JetBrains Mono",monospace;color:var(--ink)}.ingredient-review-empty{border:1px solid var(--ink);padding:16px;background:var(--amber-bg)}.ingredient-review-empty p{margin:7px 0 0;font-size:13px;line-height:1.45}
+@media(max-width:640px){.ingredient-review-list{grid-template-columns:1fr}}

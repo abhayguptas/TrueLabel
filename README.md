@@ -22,8 +22,8 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 
 1. It accepts optional personal context, such as an allergy, a condition, a symptom, or an ingredient to avoid, without turning that context into a diagnosis.
 2. It screens untrusted label content for instruction injection and personal information.
-3. It extracts the stated claims, ingredients, product dose, and category directly from text or label images.
-4. It reranks a curated catalog of primary, regulatory, dermatology, and official manufacturer references.
+3. It extracts the stated claims, ingredients, product dose, and category directly from text or label images. Text-only results are checked against the submitted text before they become label facts.
+4. It searches each verified back-label ingredient against a curated catalog of primary, regulatory, dermatology, and official manufacturer references, prioritizing India-focused records where relevant.
 5. It compares concise label clauses with selected evidence instead of treating a long document as a single claim.
 6. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
 7. It evaluates selected sensitivity profiles and optional personal context against extracted ingredients as educational cautions, never as diagnoses or safety guarantees.
@@ -50,8 +50,8 @@ The route at `POST /api/analyze` streams stage results as `text/event-stream`. I
 | Input safety | `/clocked/injection` | Blocks label content that tries to redirect the analysis workflow. |
 | Privacy | `/clocked/pii` | Redacts personal data in text before downstream processing and blocks images with detected personal data. |
 | Label structure | `/clocked/fill` | Supplies the product claims, category, ingredients, and dose shown in the interface. |
-| Source selection | `/clocked/rerank` | Selects or expands catalog records; rejected records remain visible as lower-ranked evidence. |
 | Exact reads | `/clocked/extract` | Supplies verbatim ingredient and dose reads plus Unicode-safe text offsets. |
+| Source selection | `/clocked/rerank` | Receives the verified ingredient list, selects or expands catalog records, and prioritizes applicable India-focused evidence. Rejected records remain visible as lower-ranked evidence. |
 | Cross-source review | `/clocked/compare` | Supplies direct conflict and overlap cards. |
 | Claim verification | `/clocked/grounding` | Supplies the status and evidence used by the ledger and SVG truth spectrum. |
 | Personal caution | `/clocked/decide` | Supplies the selected sensitivity probabilities and trigger explanations. |
@@ -115,7 +115,11 @@ For text, Protect runs before downstream stages and returns a transformed copy. 
 
 ## Source catalog and provenance
 
-`data/catalog.json` currently contains 40 cited evidence records across supplements, packaged foods, skincare, and regulations. The catalog is retrieval material, not a collection of precomputed conclusions. Clocked selects the applicable records at scan time.
+`data/catalog.json` currently contains 47 cited evidence records across supplements, packaged foods, skincare, and regulations. The catalog is retrieval material, not a collection of precomputed conclusions. Clocked selects the applicable records at scan time.
+
+The catalog includes India-focused FSSAI food-labelling, food-additives, and advertising-claims records; ICMR-NIN dietary guidance; CDSCO cosmetics rules; and ASCI truthful-claims and skin-lightening advertising guidance. The ingredient review marks whether an exact disclosed ingredient has an India-focused reference, another cited reference, or no specific catalog match. It never interprets a missing match as evidence that an ingredient is safe or harmful.
+
+If a user provides only a marketing claim or front label, TrueLabel does not present inferred ingredients as back-label facts. It shows a clear request for the ingredient list. In that case, the claim-review flag concerns evidence and disclosure quality only, not whether the product is harmful.
 
 Source priorities are:
 

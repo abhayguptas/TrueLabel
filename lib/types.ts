@@ -39,6 +39,13 @@ export interface IngredientResult {
   triggers: SensitivityKey[];
 }
 
+export interface IngredientReview {
+  ingredient: string;
+  status: "india_reference" | "reference" | "no_match";
+  summary: string;
+  source?: ReferenceDocument;
+}
+
 export interface ReferenceDocument {
   id: string;
   title: string;
@@ -68,6 +75,7 @@ export interface AnalyzeResult {
   sourceMode: "text" | "image" | "mixed";
   claims: ClaimResult[];
   ingredients: IngredientResult[];
+  ingredientReviews: IngredientReview[];
   references: ReferenceDocument[];
   rejectedReferences: ReferenceDocument[];
   risks: RiskResult[];
