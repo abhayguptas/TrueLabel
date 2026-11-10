@@ -65,3 +65,4 @@ export function RealityCheckTable({ result }: { result: AnalyzeResult }): React.
     </div>
   );
 }
+

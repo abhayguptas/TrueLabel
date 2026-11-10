@@ -138,3 +138,4 @@ describe("synthesizeExecutiveVerdict", () => {
     expect(html).toContain("Regulatory &amp; Consumer Advisory Notice");
   });
 });
+
