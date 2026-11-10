@@ -23,4 +23,12 @@ describe("youtube-resolver", () => {
       expect(e.message).toBeDefined();
     }
   }, 15000);
+
+  it("recovers correct casing and resolves transcript for ml8oYYFfjwo (Gillette ad)", async () => {
+    const res = await resolveInputText("https://www.youtube.com/watch?v=ml8oYYFfjwo");
+    expect(res.source.type).toBe("youtube");
+    expect(res.text.length).toBeGreaterThan(30);
+    expect(res.text.toLowerCase()).toContain("shaving");
+    console.log("Recovered and resolved Gillette transcript:", res.text);
+  }, 15000);
 });

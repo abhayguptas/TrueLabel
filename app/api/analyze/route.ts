@@ -6,6 +6,7 @@ import { sensitivityKeys, type AnalyzeRequest, type PipelineEvent } from "@/lib/
 import { InputResolutionError, resolveInputText } from "@/lib/youtube-resolver";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function errorResponse(message: string, status: number): Response {
   return Response.json({ error: message }, { status });
