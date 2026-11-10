@@ -143,21 +143,26 @@ function localEvidence(query: string, category: AnalyzeResult["productCategory"]
     const directMatches = terms.reduce((total, term) => total + (directTerms.includes(term) ? 1 : 0), 0);
     const passageMatches = terms.reduce((total, term) => total + (passageTerms.includes(term) ? 1 : 0), 0);
     const matchedTerms = directMatches * 2 + passageMatches;
-    const categoryBonus = (category === "packaged food" && document.category === "food") || category === document.category ? 0.2 : 0;
+    const categoryMatch = category === "unknown" || category === document.category || (category === "packaged food" && document.category === "food") || (category === "skincare" && document.tags.some((tag) => ["cosmetics", "skincare", "cosmetic claims", "ingredient order", "allergy", "fragrance"].includes(normalized(tag)))) || (category === "supplement" && document.tags.some((tag) => ["supplement", "dose"].includes(normalized(tag))));
+    const categoryBonus = categoryMatch ? 0.2 : 0;
     const score = matchedTerms + categoryBonus;
-    return { document, score };
-  }).filter((item) => item.score >= 2).sort((left, right) => right.score - left.score).slice(0, 8).map((item) => item.document);
+    return { document, score, categoryMatch };
+  }).filter((item) => item.categoryMatch && item.score >= 2).sort((left, right) => right.score - left.score).slice(0, 8).map((item) => item.document);
 }
 
 function categoryBaselines(category: AnalyzeResult["productCategory"]): ReferenceDocument[] {
   const categoryTerms: Record<AnalyzeResult["productCategory"], string[]> = {
-    supplement: ["supplement", "dose", "claims"],
-    "packaged food": ["fssai", "ingredients", "food label", "food additives"],
-    skincare: ["cdsco", "cosmetics", "skincare", "claims"],
-    unknown: ["fssai", "cdsco", "claims"]
+    supplement: ["supplement", "dose"],
+    "packaged food": ["fssai", "food label", "food additives", "nutrition"],
+    skincare: ["cosmetics", "skincare", "cosmetic claims", "ingredient order", "allergy", "fragrance"],
+    unknown: ["fssai", "cdsco"]
   };
   const terms = categoryTerms[category];
-  return catalog.filter((document) => /FSSAI|CDSCO|ICMR|Advertising Standards Council of India|Food and Drug Administration/i.test(document.publisher) && document.tags.some((tag) => terms.includes(normalized(tag)))).slice(0, 4);
+  return catalog.filter((document) => {
+    const hasApplicableTag = document.tags.some((tag) => terms.includes(normalized(tag)));
+    const isAuthoritative = /FSSAI|CDSCO|ICMR|Advertising Standards Council of India|Food and Drug Administration/i.test(document.publisher);
+    return isAuthoritative && hasApplicableTag;
+  }).slice(0, 4);
 }
 
 function distinctReferences(...groups: ReferenceDocument[][]): ReferenceDocument[] {
@@ -327,12 +332,15 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const claims = verifiedClaims(extractedClaims, sourceMode, safeText);
   const category = productCategory(fill.data);
   const retrievalQuery = [safeText || structuredText, ingredients.map((ingredient) => ingredient.name).join(", ")].filter(Boolean).join("\n");
+  const claimQuery = claims.join(". ");
+  const researchQuery = [claimQuery, ingredients.filter((ingredient) => !/^(water|aqua)$/i.test(ingredient.name)).slice(0, 3).map((ingredient) => ingredient.name).join(", ")].filter(Boolean).join(". ");
   const evidenceQuery = [retrievalQuery, "Prioritize applicable India-focused FSSAI, CDSCO, ICMR-NIN, and ASCI sources, then other cited primary sources."].join("\n\n");
   const localCandidates = localEvidence(retrievalQuery, category);
+  const claimCandidates = claimQuery ? localEvidence(claimQuery, category) : [];
   const externalCategory = category === "packaged food" ? "food" : category === "unknown" ? "regulation" : category;
-  const externalEvidence = localCandidates.length >= 2 ? { sources: [], status: "none" as const } : await searchPubMedEvidence(retrievalQuery, externalCategory);
+  const externalEvidence = claimQuery && claimCandidates.length < 2 ? await searchPubMedEvidence(researchQuery || claimQuery, externalCategory) : { sources: [], status: "none" as const };
   const baselines = categoryBaselines(category);
-  const candidates = distinctReferences(localCandidates, externalEvidence.sources, baselines);
+  const candidates = distinctReferences(claimCandidates, localCandidates, externalEvidence.sources, baselines);
   const rerank = await clocked<Record<string, unknown>>("rerank", {
     query: evidenceQuery,
     documents: candidates.map((document) => ({ id: document.id, title: document.title, text: document.text, metadata: { category: document.category, region: document.region ?? "global", source: document.publisher } })),
@@ -342,12 +350,10 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   const rankings = Array.isArray(rerank.data.results) ? rerank.data.results.map(record) : [];
   const selectedIds = new Set(rankings.filter((entry) => entry.action === "use" || entry.action === "expand").map((entry) => String(entry.id)));
   const rerankedReferences = candidates.filter((document) => selectedIds.has(document.id));
-  const references = rerankedReferences.length ? rerankedReferences : baselines;
+  const references = claims.length ? (rerankedReferences.length ? rerankedReferences : baselines) : [];
   const rejectedReferences = candidates.filter((document) => !selectedIds.has(document.id)).slice(0, 5);
   const reviews = ingredientReviews(ingredients);
-  const evidenceStatus: AnalyzeResult["evidenceStatus"] = !claims.length || (localCandidates.length < 2 && !externalEvidence.sources.length) ? "insufficient" : "grounded";
-  const evidenceMessage = !claims.length ? "No testable front-label claim was found. Dates, slogans, brands, and generic marketing language are intentionally excluded." : evidenceStatus === "insufficient" ? `Insufficient clinical grounding. ${externalEvidence.status === "timeout" ? "The live PubMed search timed out" : "No matching clinical record was returned"}; applicable regulatory baselines remain available.` : "Evidence sources were selected from the catalog or live PubMed retrieval.";
-  yield { stage: "rerank", payload: { response: rerank.data, retrieval: { localCandidates: localCandidates.length, externalStatus: externalEvidence.status, externalSources: externalEvidence.sources.length, baselineSources: baselines.length }, selected: references.map((item) => ({ id: item.id, title: item.title, sourceUrl: item.sourceUrl })), rejected: rejectedReferences.map((item) => ({ id: item.id, title: item.title })), ingredientReviews: reviews } };
+  yield { stage: "rerank", payload: { response: rerank.data, retrieval: { localCandidates: localCandidates.length, claimCandidates: claimCandidates.length, externalStatus: externalEvidence.status, externalSources: externalEvidence.sources.length, baselineSources: baselines.length }, selected: references.map((item) => ({ id: item.id, title: item.title, sourceUrl: item.sourceUrl })), rejected: rejectedReferences.map((item) => ({ id: item.id, title: item.title })), ingredientReviews: reviews } };
 
   const compareDocuments = [
     ...claims.slice(0, 4).map((claim, index) => ({ id: `claim-${index}`, text: claim })),
@@ -383,6 +389,9 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
     questions: decideQuestions
   }, { cache: !hasImages && !safePersonalContext });
   const normalizedClaims = normalizeClaims(grounding.data, claims, references, sourceMode);
+  const hasDirectFinding = normalizedClaims.some((claim) => claim.verdict === "supported" || claim.verdict === "contradicted" || claim.verdict === "caution");
+  const evidenceStatus: AnalyzeResult["evidenceStatus"] = !claims.length || !hasDirectFinding ? "insufficient" : "grounded";
+  const evidenceMessage = !claims.length ? "No testable front-label claim was found. Dates, slogans, brands, and generic marketing language are intentionally excluded." : evidenceStatus === "insufficient" ? `Audit inconclusive. ${externalEvidence.status === "timeout" ? "The live PubMed search timed out" : "No cited source directly established or contradicted the submitted claim"}.` : "Evidence sources directly assessed the submitted label claim.";
   const risks = normalizeRisks(decide.data, ingredients, request.sensitivities);
   const decideAnswers = record(decide.data.answers);
   const overallMessage = ingredients.length ? "Live review of disclosed ingredients, label claims, and cited evidence." : "No verified ingredient list was found. This reflects claim or disclosure uncertainty, not a finding that the product is harmful.";
