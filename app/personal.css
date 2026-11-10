@@ -3,3 +3,4 @@
 .context-field textarea{min-height:92px;margin:10px 0 8px}
 .context-field p{margin:0;font-size:11px;line-height:1.45;color:#625f59}
 .overall-caution{background:var(--paper)}
+.no-reference{grid-column:1/-1;margin:0;border:1px solid var(--ink);padding:13px;background:var(--amber-bg);font-size:12px;line-height:1.45}

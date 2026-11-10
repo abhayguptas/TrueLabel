@@ -176,7 +176,6 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
 
   const rerank = await clocked<Record<string, unknown>>("rerank", {
     query: safeText || structuredText,
-    context: safePersonalContext || undefined,
     documents: catalog.map((document) => ({ id: document.id, title: document.title, text: document.text, metadata: { category: document.category, region: document.region ?? "global", source: document.publisher } })),
     instructions: "Select only sources that can substantively assess the product claims, ingredients, region, or personal sensitivity context.",
     top_n: 8
@@ -222,11 +221,12 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
   });
   yield { stage: "compare", payload: { response: compare.data, conflicts } };
 
+  const groundingDocuments = references.length ? references.map((document) => ({ id: document.id, text: document.text })) : [{ id: "catalog-no-match", text: "No cited catalog reference was selected by Rerank for this product-label claim. The submitted label alone does not independently establish the marketing claim." }];
   const grounding = await clocked<Record<string, unknown>>("grounding", {
-    documents: references.map((document) => ({ id: document.id, text: document.text })),
+    documents: groundingDocuments,
     answer: claims.join(". ") || safeText || structuredText,
     claims: claims.length ? claims : undefined,
-    instructions: "Assess whether each product marketing statement is supported, contradicted, or not stated by the supplied label and reference material. Missing evidence is not proof of harm.",
+    instructions: "Assess whether each product marketing statement is supported, contradicted, or not stated by the supplied reference material. If the source document says that no catalog reference was selected, return not stated. Missing evidence is not proof of harm.",
     evidence: "all",
     threshold: 0.65
   }, { cache: !hasImages && !safePersonalContext });

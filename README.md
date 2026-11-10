@@ -58,6 +58,8 @@ The route at `POST /api/analyze` streams stage results as `text/event-stream`. I
 
 The HTTP client generates a UUID idempotency key for every logical request. Retries reuse the same payload and key for transient failures. API keys are read only on the server and are never returned in an event payload or client bundle.
 
+When Rerank selects no cited catalog source, TrueLabel does not fail the scan or treat the label as proof. Verify receives an explicit no-match record and returns the affected claims as not established. The evidence ledger tells the user that an external catalog source was not selected.
+
 ## Architecture
 
 ```text
