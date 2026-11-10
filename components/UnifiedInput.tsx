@@ -2,6 +2,42 @@
 
 import { useRef, useState } from "react";
 
+const presets = [
+  {
+    id: "bread",
+    label: "🍞 Brown Bread: Front vs Back (50% Maida)",
+    query: `Product: English Oven Brown Sliced Bread
+Front Claims: 100% Whole Wheat Brown Bread, No Palm Oil, No Added Colours, 28% Daily Fibre Need
+Back Label Ingredients: Wheat Flour [Atta (50%)], Refined Wheat Flour [Maida (50%)], Yeast, Sugar, Iodized Salt, Wheat Gluten, Edible Vegetable Oil (Rice Bran), Class II Preservative (282), Malt Powder, Wheat Bran, Improvers [170(i), 510, 923, 1100], Acidity Regulator (260), Emulsifiers [471, 472e, 481(i)], Antioxidant (300).`,
+    context: ""
+  },
+  {
+    id: "skincare",
+    label: "✨ Minimalist Vitamin B5 Cream (Fungal Acne)",
+    query: `Product: Minimalist Vitamin B5 10% Moisturizer
+Front Claims: 10% Vitamin B5 (Panthenol) Moisturizer, Deeply hydrates skin & repairs skin barrier, Fragrance-Free, Non-Comedogenic
+Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Glycerin, Betaine, Polyacrylate-13, Polysorbate 20, Phenoxyethanol, Ethylhexylglycerin.`,
+    context: "Fungal acne prone skin, avoid pore-clogging esters like polysorbate"
+  },
+  {
+    id: "shilajit",
+    label: "⚡ Shilajit Booster (80% Cortisol Drop Claim)",
+    query: `Product: Pure Himalayan Shilajit Booster Resin
+Front Claims: Clinically proven to lower cortisol by 80% and double testosterone in 14 days, 60% Fulvic Acid
+Back Label Ingredients: Purified Shilajit Resin (250mg), Ashwagandha Extract (50mg), Maltodextrin, Potassium Sorbate.`,
+    context: "Hormone sensitivity, check clinical dose vs effective dose"
+  },
+  {
+    id: "snack",
+    label: "🥔 Pringles: India Palmolein vs US Sunflower",
+    query: `Product: Pringles Original Potato Crisps
+Front Claims: Original Crisp Flavor, Clean Taste, No Artificial Flavors
+Back Label (India Formula): Dried Potatoes, Edible Vegetable Oil (Palmolein), Rice Flour, Wheat Starch, Emulsifier (INS 471), Maltodextrin, Salt.
+Back Label (US Formula): Dried potatoes, vegetable oil (corn, cottonseed, high oleic sunflower oil), degerminated corn flour, cornstarch, rice flour, maltodextrin, salt, wheat starch.`,
+    context: "Clean oils only, strictly palm oil free"
+  }
+];
+
 async function compressImage(file: File): Promise<string> {
   const source = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -35,7 +71,15 @@ async function compressImage(file: File): Promise<string> {
   return result;
 }
 
-export function UnifiedInput({ disabled, scanning, onSubmit }: { disabled: boolean; scanning: boolean; onSubmit: (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => void }): React.ReactElement {
+export function UnifiedInput({
+  disabled,
+  scanning,
+  onSubmit
+}: {
+  disabled: boolean;
+  scanning: boolean;
+  onSubmit: (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => void;
+}): React.ReactElement {
   const [query, setQuery] = useState("");
   const [personalContext, setPersonalContext] = useState("");
   const [front, setFront] = useState<string | null>(null);
@@ -43,10 +87,19 @@ export function UnifiedInput({ disabled, scanning, onSubmit }: { disabled: boole
   const [error, setError] = useState("");
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
+
+  const applyPreset = (preset: (typeof presets)[number]) => {
+    setQuery(preset.query);
+    setPersonalContext(preset.context);
+    setFront(null);
+    setBack(null);
+    setError("");
+  };
+
   const selectImage = async (file: File | undefined, side: "front" | "back") => {
     if (!file) return;
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 4 * 1024 * 1024) {
-      setError("Use a PNG, JPEG, or WebP label image smaller than 4 MB.");
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 8 * 1024 * 1024) {
+      setError("Use a PNG, JPEG, or WebP label image smaller than 8 MB.");
       return;
     }
     try {
@@ -57,19 +110,116 @@ export function UnifiedInput({ disabled, scanning, onSubmit }: { disabled: boole
       setError(reason instanceof Error ? reason.message : "The image could not be prepared.");
     }
   };
+
   const submit = () => {
     if (scanning) return;
-    if (!query.trim() && !front && !back) return setError("Add product text or at least one label photo.");
-    if (front && back && ((front.length + back.length - front.indexOf(",") - back.indexOf(",") - 2) * 0.75 > 2400000)) return setError("The compressed label images are still too large. Choose smaller source images.");
+    if (!query.trim() && !front && !back) return setError("Add product text, pick a one-click preset, or upload label photos.");
+    if (
+      front &&
+      back &&
+      (front.length + back.length - front.indexOf(",") - back.indexOf(",") - 2) * 0.75 > 2400000
+    ) {
+      return setError("The compressed label images are still too large. Choose smaller source images.");
+    }
     onSubmit({ query, personalContext, frontImageBase64: front, backImageBase64: back });
   };
-  return <section className="input-card">
-    <div className="input-heading"><div><p className="eyebrow">Live product scan</p><h1>Read the label behind the claim.</h1></div><p>Paste label copy or upload a front and back label. Results are evidence checks, not medical advice.</p></div>
-    <textarea value={query} onChange={(event) => setQuery(event.target.value)} maxLength={15000} placeholder="Paste product claims, a back-label ingredient list, or a YouTube Short or video ad link." aria-label="Product text" />
-    <p className="source-help">YouTube videos with public English captions are resolved live. Instagram and TikTok links require a pasted transcript.</p>
-    <div className="context-field"><label htmlFor="personal-context">Optional personal context</label><textarea id="personal-context" value={personalContext} onChange={(event) => setPersonalContext(event.target.value)} maxLength={1000} placeholder="For example: fragrance allergy, acne-prone skin, diabetes, or a specific ingredient you avoid. Do not include your name, contact details, or medical records." aria-describedby="personal-context-note" /><p id="personal-context-note">Used only to check label ingredients for a potential educational caution. It cannot diagnose a condition or determine whether a product is safe for you.</p></div>
-    <div className="upload-row"><input ref={frontRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={scanning} onChange={(event) => selectImage(event.target.files?.[0], "front")} /><input ref={backRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={scanning} onChange={(event) => selectImage(event.target.files?.[0], "back")} /><button type="button" className="upload-button" disabled={scanning} onClick={() => frontRef.current?.click()}>{front ? "Replace front label" : "Upload front label"}</button><button type="button" className="upload-button" disabled={scanning} onClick={() => backRef.current?.click()}>{back ? "Replace back label" : "Upload back label"}</button>{front && <span className="file-ready">Front ready</span>}{back && <span className="file-ready">Back ready</span>}</div>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="input-footer"><span>{query.length.toLocaleString()} / 15,000 product characters · {personalContext.length.toLocaleString()} / 1,000 context characters</span><button type="button" className="scan-button" disabled={disabled || scanning} onClick={submit}>{scanning ? "Live scan running" : disabled ? "Add API key to scan" : "Run live label scan"}</button></div>
-  </section>;
+
+  return (
+    <section className="input-card">
+      <div className="input-heading">
+        <div>
+          <p className="eyebrow">Consumer Truth Engine · Live Scan</p>
+          <h1>Read the label behind the claim.</h1>
+        </div>
+        <p>
+          Cross-examine viral marketing promises against back-label ingredients, PubMed trials, and regional formulas in real time.
+        </p>
+      </div>
+
+      <div className="preset-bar">
+        <span className="preset-label">One-Click Demos:</span>
+        <div className="preset-pills">
+          {presets.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className="preset-pill"
+              disabled={scanning}
+              onClick={() => applyPreset(preset)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <textarea
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        maxLength={15000}
+        placeholder="Paste product claims, ingredient lists, or a YouTube video link. Or click a 1-click demo above or upload photos below."
+        aria-label="Product text"
+      />
+      <p className="source-help">
+        YouTube videos with public English captions are resolved live. Drop front &amp; back label photos below for instant multi-modal extraction.
+      </p>
+
+      <div className="context-field">
+        <label htmlFor="personal-context">Optional personal health / skin context</label>
+        <textarea
+          id="personal-context"
+          value={personalContext}
+          onChange={(event) => setPersonalContext(event.target.value)}
+          maxLength={1000}
+          placeholder="For example: fungal acne prone, fragrance allergy, diabetes, high blood pressure, or strictly avoid palm oil. (Do not include names or private data)."
+          aria-describedby="personal-context-note"
+        />
+        <p id="personal-context-note">
+          Evaluated via /clocked/decide for personal sensitivity cautions. It does not replace professional medical care.
+        </p>
+      </div>
+
+      <div className="upload-row">
+        <input
+          ref={frontRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={scanning}
+          onChange={(event) => selectImage(event.target.files?.[0], "front")}
+        />
+        <input
+          ref={backRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={scanning}
+          onChange={(event) => selectImage(event.target.files?.[0], "back")}
+        />
+        <button type="button" className="upload-button" disabled={scanning} onClick={() => frontRef.current?.click()}>
+          {front ? "✓ Replace front label" : "📷 Upload front label"}
+        </button>
+        <button type="button" className="upload-button" disabled={scanning} onClick={() => backRef.current?.click()}>
+          {back ? "✓ Replace back label" : "📷 Upload back label"}
+        </button>
+        {front && <span className="file-ready">Front photo loaded</span>}
+        {back && <span className="file-ready">Back photo loaded</span>}
+      </div>
+
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="input-footer">
+        <span>
+          {query.length.toLocaleString()} / 15,000 product characters · {personalContext.length.toLocaleString()} / 1,000 context characters
+        </span>
+        <button type="button" className="scan-button" disabled={disabled || scanning} onClick={submit}>
+          {scanning ? "Analyzing with Clocked..." : disabled ? "Add API key to scan" : "Run Live Truth Scan ⚡"}
+        </button>
+      </div>
+    </section>
+  );
 }

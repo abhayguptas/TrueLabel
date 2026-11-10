@@ -1,7 +1,45 @@
 import type { AnalyzeResult } from "@/lib/types";
 
-const labels = { india_reference: "India reference", reference: "Cited reference", no_match: "No specific match" };
+const labels = {
+  india_reference: "Official Indian Standard",
+  reference: "Scientific Knowledge Base",
+  no_match: "Packaging Fact"
+};
 
 export function IngredientReview({ result }: { result: AnalyzeResult }): React.ReactElement {
-  return <section className="ingredient-review"><div className="section-label"><span>Back-label ingredient review</span><span>Exact disclosed ingredients only</span></div>{result.ingredientReviews.length ? <div className="ingredient-review-list">{result.ingredientReviews.map((review) => <article key={review.ingredient} className={`ingredient-review-row ${review.status}`}><div><strong>{review.ingredient}</strong><span>{labels[review.status]}</span></div><p>{review.summary}</p>{review.source ? <a href={review.source.sourceUrl} target="_blank" rel="noreferrer">{review.source.publisher}: {review.source.title}</a> : <span className="no-match-note">The back label was read. No ingredient-specific cited source is currently available for this disclosed ingredient.</span>}</article>)}</div> : <div className="ingredient-review-empty"><strong>No verified ingredient list found.</strong><p>Paste the Ingredients section or upload a readable back-label image. TrueLabel will not invent ingredient facts from a front-label claim.</p></div>}</section>;
+  return (
+    <section className="ingredient-review">
+      <div className="section-label">
+        <span>Back-Label Ingredient Breakdown ({result.ingredients.length} items)</span>
+        <span>Exact Disclosed Ingredients</span>
+      </div>
+      {result.ingredientReviews.length ? (
+        <div className="ingredient-review-list">
+          {result.ingredientReviews.map((review) => (
+            <article key={review.ingredient} className={`ingredient-review-row ${review.status}`}>
+              <div>
+                <strong>{review.ingredient}</strong>
+                <span>{labels[review.status]}</span>
+              </div>
+              <p>{review.summary}</p>
+              {review.source ? (
+                <a href={review.source.sourceUrl} target="_blank" rel="noreferrer">
+                  ↗ {review.source.publisher}: {review.source.title}
+                </a>
+              ) : (
+                <span className="no-match-note">Disclosed on product back label.</span>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="ingredient-review-empty">
+          <strong>No back-label ingredient list found.</strong>
+          <p>
+            Paste the Ingredients text or upload a clear back-label photo to inspect what is actually inside this product.
+          </p>
+        </div>
+      )}
+    </section>
+  );
 }

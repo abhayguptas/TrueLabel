@@ -1,14 +1,86 @@
 .context-field{margin:18px 0;border:1px solid var(--ink);padding:14px;background:var(--paper)}
 .context-field label{display:block;font:500 11px "JetBrains Mono",monospace;letter-spacing:.07em;text-transform:uppercase}
-.context-field textarea{min-height:92px;margin:10px 0 8px}
+.context-field textarea{min-height:72px;margin:10px 0 8px}
 .context-field p{margin:0;font-size:11px;line-height:1.45;color:#625f59}
 .source-help{margin:-4px 0 18px;font-size:12px;line-height:1.45;color:#625f59}
 .inconclusive-score{font-size:29px!important;letter-spacing:-1.4px!important;line-height:1.1!important}
-.graph-empty{margin:0 0 12px;border:1px solid var(--ink);padding:10px 12px;background:var(--amber-bg);font-size:12px;line-height:1.45}.graph-node.triggered rect{fill:var(--red-bg);stroke:var(--red);stroke-width:3}.graph-node.triggered text{fill:var(--red)}
+.graph-empty{margin:0 0 12px;border:1px solid var(--ink);padding:10px 12px;background:var(--amber-bg);font-size:12px;line-height:1.45}
+.graph-node.triggered rect{fill:var(--red-bg);stroke:var(--red);stroke-width:3}
+.graph-node.triggered text{fill:var(--red)}
 .overall-caution{background:var(--paper)}
 .no-reference{grid-column:1/-1;margin:0;border:1px solid var(--ink);padding:13px;background:var(--amber-bg);font-size:12px;line-height:1.45}
 .ingredient-review{margin-top:24px;border:1px solid var(--ink);padding:20px;background:var(--surface);box-shadow:3px 3px 0 var(--ink)}
 .ingredient-review-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--ink);border-left:1px solid var(--ink)}
-.ingredient-review-row{min-height:132px;padding:15px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--paper)}
-.ingredient-review-row>div{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.ingredient-review-row strong{font-size:14px}.ingredient-review-row span{font:500 10px "JetBrains Mono",monospace;text-transform:uppercase;color:var(--amber)}.ingredient-review-row.india_reference span{color:var(--green)}.ingredient-review-row p{margin:10px 0;font-size:12px;line-height:1.45}.ingredient-review-row a,.no-match-note{font:500 11px/1.4 "JetBrains Mono",monospace;color:var(--ink)}.ingredient-review-empty{border:1px solid var(--ink);padding:16px;background:var(--amber-bg)}.ingredient-review-empty p{margin:7px 0 0;font-size:13px;line-height:1.45}
-@media(max-width:640px){.ingredient-review-list{grid-template-columns:1fr}}
+.ingredient-review-row{min-height:110px;padding:15px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--paper)}
+.ingredient-review-row>div{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.ingredient-review-row strong{font-size:14px}
+.ingredient-review-row span{font:500 10px "JetBrains Mono",monospace;text-transform:uppercase;color:var(--amber)}
+.ingredient-review-row.india_reference span{color:var(--green)}
+.ingredient-review-row p{margin:8px 0;font-size:12px;line-height:1.45}
+.ingredient-review-row a,.no-match-note{font:500 11px/1.4 "JetBrains Mono",monospace;color:var(--ink)}
+.ingredient-review-empty{border:1px solid var(--ink);padding:16px;background:var(--amber-bg)}
+.ingredient-review-empty p{margin:7px 0 0;font-size:13px;line-height:1.45}
+
+/* One-Click Presets Bar */
+.preset-bar{margin:16px 0 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--paper);border:1px solid var(--ink);padding:10px 14px}
+.preset-label{font:600 11px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.05em;color:var(--ink)}
+.preset-pills{display:flex;gap:8px;flex-wrap:wrap}
+.preset-pill{border:1px solid var(--ink);background:#fff;padding:6px 11px;font:500 12px Inter,sans-serif;cursor:pointer;transition:transform 0.1s ease, background 0.1s ease}
+.preset-pill:hover{background:var(--lime);transform:translateY(-1px);box-shadow:2px 2px 0 var(--ink)}
+
+/* Verdict Executive Banner */
+.verdict-banner{margin-top:24px;border:1px solid var(--ink);background:#fff;box-shadow:4px 4px 0 var(--ink);padding:26px}
+.verdict-header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:1px solid var(--ink);padding-bottom:20px}
+.verdict-title{font-size:clamp(26px,3.8vw,38px);line-height:1.05;letter-spacing:-1.8px;margin:6px 0 8px}
+.verdict-subtitle{margin:0;font-size:14px;color:#585750;line-height:1.45}
+.verdict-score-pill{border:2px solid var(--ink);padding:12px 18px;min-width:140px;text-align:center;box-shadow:3px 3px 0 var(--ink)}
+.verdict-badge-green{background:var(--green-bg);color:var(--green)}
+.verdict-badge-red{background:var(--red-bg);color:var(--red)}
+.verdict-badge-amber{background:var(--amber-bg);color:var(--amber)}
+.score-num{font-size:38px;font-weight:900;letter-spacing:-2px;line-height:1}
+.score-num span{font-size:16px;font-weight:500;letter-spacing:0}
+.score-desc{font:700 11px "JetBrains Mono",monospace;text-transform:uppercase;margin-top:4px;letter-spacing:.04em}
+
+.verdict-highlights-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:22px 0}
+.highlight-card{border:1px solid var(--ink);padding:16px;background:var(--paper);box-shadow:2px 2px 0 var(--ink);position:relative}
+.card-badge{font:600 11px "JetBrains Mono",monospace;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px}
+.highlight-card strong{display:block;font-size:13px;margin-bottom:6px}
+.highlight-card ul{margin:8px 0 0;padding-left:18px;font-size:12px;line-height:1.45}
+.highlight-card li{margin-bottom:6px}
+.highlight-card p{margin:0;font-size:12px;line-height:1.45;color:#4a4943}
+.red-card{background:var(--red-bg);border-color:var(--red)}
+.red-card .card-badge{color:var(--red)}
+.green-card{background:var(--green-bg);border-color:var(--green)}
+.green-card .card-badge{color:var(--green)}
+.amber-card{background:var(--amber-bg);border-color:var(--amber)}
+.amber-card .card-badge{color:var(--amber)}
+
+/* Reality Check Side-by-Side Table */
+.reality-check-table-wrap{margin-top:20px;border-top:1px solid var(--ink);padding-top:16px}
+.reality-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+.reality-table th{border-bottom:2px solid var(--ink);padding:10px 12px;font:600 11px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.05em}
+.reality-table td{border-bottom:1px solid var(--ink);padding:14px 12px;vertical-align:top}
+.reality-table .claim-cell{width:32%}
+.reality-table .claim-cell strong{display:block;font-size:14px;margin-bottom:4px}
+.claim-tag{display:inline-block;padding:2px 6px;border:1px solid var(--ink);background:var(--paper);font:500 10px "JetBrains Mono",monospace;text-transform:uppercase}
+.reality-table .evidence-cell{width:46%}
+.reality-table .evidence-cell p{margin:0 0 5px;line-height:1.45;font-size:12.5px}
+.source-tag{font:500 10px "JetBrains Mono",monospace;color:#615f58}
+.reality-table .verdict-cell{width:22%;text-align:right}
+.verdict-pill{display:inline-block;padding:5px 9px;border:1px solid var(--ink);font:700 11px "JetBrains Mono",monospace;text-transform:uppercase}
+.verdict-pill.supported{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.verdict-pill.contradicted{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+.verdict-pill.caution,.verdict-pill.not_stated{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+
+/* Conflict cards */
+.conflict-item{border-top:1px solid var(--ink);padding:10px 0}
+.conflict-tag{font:700 10px "JetBrains Mono",monospace;color:var(--red);display:block;margin-bottom:4px}
+.conflict-item p{margin:3px 0;font-size:12px;line-height:1.4}
+.no-conflict-note{color:var(--green);font-size:12px;margin:8px 0}
+
+@media(max-width:768px){
+  .verdict-header{flex-direction:column}
+  .verdict-score-pill{width:100%}
+  .reality-table th:nth-child(2), .reality-table td:nth-child(2){display:none}
+  .ingredient-review-list{grid-template-columns:1fr}
+}
