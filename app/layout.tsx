@@ -5,7 +5,11 @@ import "@fontsource/jetbrains-mono/500.css";
 import "./globals.css";
 import "./personal.css";
 
-export const metadata = { title: "TrueLabel | Evidence behind the label", description: "Live product-label evidence checks powered by Clocked." };
+export const metadata = {
+  title: "TrueLabel | Evidence behind the label",
+  description: "Live product-label evidence checks powered by Clocked.",
+  icons: { icon: "/icon.svg" }
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>): React.ReactElement {
   return <html lang="en"><body>{children}</body></html>;
