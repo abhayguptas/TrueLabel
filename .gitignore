@@ -11,3 +11,5 @@ test-results
 *.log
 plans
 *.plan.md
+social.md
+BLOG.md

@@ -35,7 +35,7 @@ export default function Home(): React.ReactElement {
     fetch("/api/health").then((response) => response.json()).then((data: { hasApiKey: boolean }) => setAvailable(data.hasApiKey)).catch(() => setAvailable(false)).finally(() => setReady(true));
   }, []);
   const updateSensitivities = (value: SensitivityKey[]) => { setSensitivities(value); localStorage.setItem("truelabel_sensitivities", JSON.stringify(value)); };
-  const scan = async (input: { query: string; frontImageBase64: string | null; backImageBase64: string | null }) => {
+  const scan = async (input: { query: string; personalContext: string; frontImageBase64: string | null; backImageBase64: string | null }) => {
     setEvents([]);
     setResult(null);
     setError("");

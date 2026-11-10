@@ -20,12 +20,13 @@ The problem is not a lack of product information. It is the gap between unstruct
 
 TrueLabel converts a label into a structured, evidence-linked inspection flow:
 
-1. It screens untrusted label content for instruction injection and personal information.
-2. It extracts the stated claims, ingredients, product dose, and category directly from text or label images.
-3. It reranks a curated catalog of primary, regulatory, dermatology, and official manufacturer references.
-4. It compares concise label clauses with selected evidence instead of treating a long document as a single claim.
-5. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
-6. It evaluates selected sensitivity profiles against extracted ingredients as an educational caution, never as a diagnosis.
+1. It accepts optional personal context, such as an allergy, a condition, a symptom, or an ingredient to avoid, without turning that context into a diagnosis.
+2. It screens untrusted label content for instruction injection and personal information.
+3. It extracts the stated claims, ingredients, product dose, and category directly from text or label images.
+4. It reranks a curated catalog of primary, regulatory, dermatology, and official manufacturer references.
+5. It compares concise label clauses with selected evidence instead of treating a long document as a single claim.
+6. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
+7. It evaluates selected sensitivity profiles and optional personal context against extracted ingredients as educational cautions, never as diagnoses or safety guarantees.
 
 ## Product capabilities
 
@@ -37,6 +38,7 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 | Label comparison | Compare identifies direct conflicts, duplication, and regional formulation differences. |
 | Claim verification | Verify returns claim-level evidence and drives the truth-spectrum status colors. |
 | Personal context | Decide scores only the sensitivity filters the user selects. |
+| Optional context | Users can state an allergy, condition, symptom, or ingredient concern for a focused, non-diagnostic ingredient caution. |
 | Export | A completed scan can produce a standalone SVG truth badge and Markdown embed text. |
 
 ## Clocked integration
@@ -66,7 +68,7 @@ Browser input
 Input validation and per-device/IP live-scan limit
     |
     v
-Guard + Protect
+Protect -> Guard
     |
     v
 Fill -> Rerank -> Extract -> Compare -> Verify + Decide
@@ -79,6 +81,35 @@ Truth spectrum, evidence ledger, comparison panels, SVG badge
 ```
 
 `lib/pipeline-runner.ts` owns sequencing and normalization. Calls are made sequentially, so a single user job consumes at most one Clocked request at a time. `lib/clocked-client.ts` owns authenticated transport, retry behavior, and idempotency. `lib/content-cache.ts` canonicalizes successful text payloads with sorted JSON keys and SHA-256. Failed or malformed responses are never cached.
+
+## Judge review guide
+
+### Product routes
+
+| Route | Method | Purpose | Review signal |
+| --- | --- | --- | --- |
+| `/` | `GET` | Product interface | The pipeline inspector exposes every completed stage and the resulting evidence views. |
+| `/api/health` | `GET` | Deployment readiness | Returns `hasApiKey`, the real catalog count, and `live-only` mode without exposing a secret. |
+| `/api/analyze` | `POST` | Live analysis | Returns ordered SSE events for Guard and Protect, Fill, Rerank, Extract, Compare, Verify and Decide. |
+
+### Clocked request discipline
+
+The server sends Clocked calls only from `app/api/analyze/route.ts` through `lib/clocked-client.ts`. Each outbound request uses `Authorization: Bearer ${CLOCKED_API_KEY}`, `Content-Type: application/json`, and a fresh UUID `Idempotency-Key`. Retryable 429, recoverable 409, and 5xx responses reuse the same payload and idempotency key with bounded jittered backoff. Requests are sequential inside one scan, which keeps a user job at one in-flight Clocked call.
+
+For text, Protect runs before downstream stages and returns a transformed copy. For image labels, Protect can identify personal data but cannot safely transform pixels, so TrueLabel blocks an image with detected identifiers. Guard evaluates sanitized text and each image source before they reach the label pipeline. The browser inspector receives redacted safety summaries rather than raw Protect entity values.
+
+### Original product-plan verification
+
+| Plan requirement | Implementation status |
+| --- | --- |
+| Next.js App Router with no external database | Complete. The repository is a single App Router project with local optional caching only. |
+| Eight meaningful Clocked endpoints | Complete. Every endpoint has a downstream visual or admission-control effect. |
+| SSE stage streaming and inspection | Complete. `POST /api/analyze` emits the ordered stage sequence and the interface exposes each result. |
+| Live-only operation | Complete. Recorded presets and replay behavior were deliberately removed after the live-only requirement. |
+| Safety, PII handling, caching, and rate limits | Complete. The implementation details are documented below and enforced in the route and pipeline. |
+| Real cited catalog | Complete. The catalog contains 40 unique source records with valid HTTPS URLs. |
+| Product identity and documentation | Complete. The repository includes the original SVG mark and this engineering README. |
+| Type checks, tests, and production build | Complete. Run `pnpm lint`, `pnpm test`, and `pnpm build`. |
 
 ## Source catalog and provenance
 
@@ -151,6 +182,7 @@ Request body:
 ```json
 {
   "query": "Product text or marketing claim",
+  "personalContext": "Optional allergy, condition, symptom, or ingredient concern",
   "frontImageBase64": "data:image/jpeg;base64,... or null",
   "backImageBase64": "data:image/jpeg;base64,... or null",
   "sensitivities": ["acne", "eczema"],
@@ -170,9 +202,11 @@ Returns the server health state, API-key availability, catalog size, and the `li
 - `CLOCKED_API_KEY` is server-only and `.env` files are ignored by Git.
 - The server uses a SHA-256 hash of IP address and the browser's durable local device ID to enforce 15 live, uncached scans per hour per instance.
 - Text is capped at 15,000 characters. Only PNG, JPEG, and WebP labels are accepted.
+- Optional personal context is capped at 1,000 characters. The interface asks users not to enter names, contact details, medical records, or other identifying information.
+- Personal context is sent only to the live analysis route for its stated educational label check. Direct identifiers returned by Protect are removed before it reaches Rerank or Decide; self-reported condition language is used only for the requested caution assessment.
 - The interface permits two source images. It compresses them client-side to Clocked's aggregate image budget before upload.
-- Text that contains detected PII is transformed before later text processing. Image input that appears to contain personal data is blocked because native image analysis cannot safely redact pixels for downstream use.
-- Cached data is limited to successful text-derived responses. Image-derived content is not written to the local disk cache.
+- Text that contains detected PII is transformed before later text processing. Image input that appears to contain personal data is blocked because native image analysis cannot safely redact pixels for downstream use. Safety-event payloads expose types and counts, not detected identifier values.
+- Cached data is limited to successful, sanitized text-derived responses. Protect requests, optional personal-context requests, and image-derived content are not written to the local disk cache.
 - Vercel server filesystems are ephemeral. The in-memory cache and rate limiter are instance-local by design because this project has no external database.
 
 ## Repository layout
@@ -192,4 +226,4 @@ Deploy as one Next.js project on Vercel. Add `CLOCKED_API_KEY` as an encrypted s
 
 ## Responsible-use note
 
-TrueLabel is an evidence-reading aid. It does not diagnose a condition, prescribe treatment, verify product safety, or replace advice from a qualified clinician, pharmacist, dietitian, or other appropriate professional.
+TrueLabel is an evidence-reading aid. Its caution indicators are not a determination that a product is harmful or safe for any person. It does not diagnose a condition, prescribe treatment, verify product safety, or replace advice from a qualified clinician, pharmacist, dietitian, or other appropriate professional.

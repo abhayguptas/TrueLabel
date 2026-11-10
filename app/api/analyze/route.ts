@@ -22,16 +22,18 @@ function isImage(value: unknown): value is string {
 function validate(input: unknown): AnalyzeRequest | string {
   const request = input as Partial<AnalyzeRequest>;
   const query = typeof request.query === "string" ? request.query : "";
+  const personalContext = typeof request.personalContext === "string" ? request.personalContext : "";
   const frontImageBase64 = request.frontImageBase64 === null || isImage(request.frontImageBase64) ? request.frontImageBase64 ?? null : undefined;
   const backImageBase64 = request.backImageBase64 === null || isImage(request.backImageBase64) ? request.backImageBase64 ?? null : undefined;
   const sensitivities = Array.isArray(request.sensitivities) ? request.sensitivities.filter((item): item is AnalyzeRequest["sensitivities"][number] => sensitivityKeys.includes(item as AnalyzeRequest["sensitivities"][number])) : [];
   if (!query.trim() && !frontImageBase64 && !backImageBase64) return "Enter product text or upload a label image.";
   if (query.length > 15000) return "Product text is limited to 15,000 characters.";
+  if (personalContext.length > 1000) return "Personal context is limited to 1,000 characters.";
   if (frontImageBase64 === undefined || backImageBase64 === undefined) return "Images must be PNG, JPEG, or WebP data URLs.";
   const images = [frontImageBase64, backImageBase64].filter((image): image is string => Boolean(image));
   if (images.some((image) => decodedBytes(image) > 4 * 1024 * 1024)) return "Each source image must be 4 MB or smaller.";
   if (images.reduce((total, image) => total + decodedBytes(image), 0) > 2.4 * 1024 * 1024) return "Compressed label images must total 2.4 MB or less.";
-  return { query, frontImageBase64, backImageBase64, sensitivities, presetId: null, forceLive: true };
+  return { query, personalContext, frontImageBase64, backImageBase64, sensitivities, presetId: null, forceLive: true };
 }
 
 function sse(event: PipelineEvent): Uint8Array {

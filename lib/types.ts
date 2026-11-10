@@ -6,6 +6,7 @@ export type Verdict = "supported" | "contradicted" | "not_stated" | "unproven" |
 
 export interface AnalyzeRequest {
   query: string;
+  personalContext: string;
   frontImageBase64: string | null;
   backImageBase64: string | null;
   sensitivities: SensitivityKey[];
@@ -56,6 +57,12 @@ export interface RiskResult {
   triggers: string[];
 }
 
+export interface CautionResult {
+  probability: number;
+  verdict: "low" | "caution" | "high";
+  message: string;
+}
+
 export interface AnalyzeResult {
   inputText: string;
   sourceMode: "text" | "image" | "mixed";
@@ -64,6 +71,8 @@ export interface AnalyzeResult {
   references: ReferenceDocument[];
   rejectedReferences: ReferenceDocument[];
   risks: RiskResult[];
+  overallCaution: CautionResult;
+  personalContextCaution?: CautionResult;
   conflicts: Array<{ left: string; right: string; detail: string; confidence: number }>;
   productDose?: { product: string; clinical: string; productValue?: number; clinicalValue?: number };
   regionalDiff?: { india: string; international: string; summary: string };
