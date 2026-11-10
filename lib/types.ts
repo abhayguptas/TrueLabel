@@ -1,7 +1,7 @@
 export const sensitivityKeys = ["acne", "fungal_acne", "eczema", "diabetic", "palm_oil_free"] as const;
 
 export type SensitivityKey = (typeof sensitivityKeys)[number];
-export type PipelineStage = "guard_protect" | "fill" | "rerank" | "extract" | "compare" | "verify_decide" | "complete" | "error";
+export type PipelineStage = "resolve_source" | "guard_protect" | "fill" | "rerank" | "extract" | "compare" | "verify_decide" | "complete" | "error";
 export type Verdict = "supported" | "contradicted" | "not_stated" | "unproven" | "caution";
 
 export interface AnalyzeRequest {
@@ -12,6 +12,7 @@ export interface AnalyzeRequest {
   sensitivities: SensitivityKey[];
   presetId: string | null;
   forceLive: boolean;
+  inputSource?: { type: "text" | "youtube"; label?: string; videoId?: string };
 }
 
 export interface EvidenceSpan {
@@ -72,7 +73,11 @@ export interface CautionResult {
 
 export interface AnalyzeResult {
   inputText: string;
+  inputSource: { type: "text" | "youtube"; label?: string; videoId?: string };
   sourceMode: "text" | "image" | "mixed";
+  productCategory: "supplement" | "packaged food" | "skincare" | "unknown";
+  evidenceStatus: "grounded" | "insufficient";
+  evidenceMessage: string;
   claims: ClaimResult[];
   ingredients: IngredientResult[];
   ingredientReviews: IngredientReview[];

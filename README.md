@@ -6,7 +6,7 @@
 
 <p align="center">Live evidence checks for product labels, marketing claims, ingredients, and regional formulas.</p>
 
-TrueLabel is a zero-login Next.js application for inspecting supplements, packaged foods, and skincare labels. A user supplies product text or front and back label photos. The server runs a live Clocked pipeline, selects relevant cited evidence, and returns an inspectable record of claims, ingredients, conflicts, source passages, and optional sensitivity cautions.
+TrueLabel is a zero-login Next.js application for inspecting supplements, packaged foods, skincare labels, and public YouTube ads with English captions. A user supplies product text, a YouTube video or Short URL, or front and back label photos. The server runs a live Clocked pipeline, selects relevant cited evidence, and returns an inspectable record of claims, ingredients, conflicts, source passages, and optional sensitivity cautions.
 
 TrueLabel does not contain recorded runs, fixture results, synthetic findings, or a demo fallback. Every completed scan requires a valid `CLOCKED_API_KEY` and calls Clocked from the server.
 
@@ -22,9 +22,10 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 
 1. It accepts optional personal context, such as an allergy, a condition, a symptom, or an ingredient to avoid, without turning that context into a diagnosis.
 2. It screens untrusted label content for instruction injection and personal information.
-3. It extracts the stated claims, ingredients, product dose, and category directly from text or label images. Text-only results are checked against the submitted text before they become label facts.
-4. It searches each verified back-label ingredient against a curated catalog of primary, regulatory, dermatology, and official manufacturer references, prioritizing India-focused records where relevant.
-5. It compares concise label clauses with selected evidence instead of treating a long document as a single claim.
+3. It resolves public YouTube URLs to an English caption transcript before the security and Clocked stages. Instagram and TikTok URLs receive a paste-transcript message because their public caption reads are unreliable.
+4. It extracts the stated claims, ingredients, product dose, and category directly from text or label images. Text-only results are checked against the submitted text before they become label facts.
+5. It searches each verified back-label ingredient against a curated catalog first. When local matching is weak, it calls the live PubMed E-utilities API, then supplies applicable India-focused and FDA baselines before Clocked source selection.
+6. It compares isolated claims with the most relevant single source clause instead of treating a long document as a single claim.
 6. It verifies each claim, presents supporting or conflicting passages, and displays the outcome in a connected evidence graph.
 7. It evaluates selected sensitivity profiles and optional personal context against extracted ingredients as educational cautions, never as diagnoses or safety guarantees.
 
@@ -32,7 +33,7 @@ TrueLabel converts a label into a structured, evidence-linked inspection flow:
 
 | Area | Behavior |
 | --- | --- |
-| Product intake | Paste up to 15,000 characters or upload one front and one back label image. |
+| Product intake | Paste up to 15,000 characters, a public YouTube URL with English captions, or upload one front and one back label image. |
 | Live analysis | All eight Clocked calls run server-side with a real API key. |
 | Evidence selection | Rerank determines which catalog references reach later stages. |
 | Label comparison | Compare identifies direct conflicts, duplication, and regional formulation differences. |
@@ -51,7 +52,7 @@ The route at `POST /api/analyze` streams stage results as `text/event-stream`. I
 | Privacy | `/clocked/pii` | Redacts personal data in text before downstream processing and blocks images with detected personal data. |
 | Label structure | `/clocked/fill` | Supplies the product claims, category, ingredients, and dose shown in the interface. |
 | Exact reads | `/clocked/extract` | Supplies verbatim ingredient and dose reads plus Unicode-safe text offsets. |
-| Source selection | `/clocked/rerank` | Receives the verified ingredient list, selects or expands catalog records, and prioritizes applicable India-focused evidence. Rejected records remain visible as lower-ranked evidence. |
+| Source selection | `/clocked/rerank` | Receives the verified ingredient list and hybrid retrieval candidates, then selects or expands catalog, live PubMed, and regulatory baseline records. Rejected records remain visible as lower-ranked evidence. |
 | Cross-source review | `/clocked/compare` | Supplies direct conflict and overlap cards. |
 | Claim verification | `/clocked/grounding` | Supplies the status and evidence used by the ledger and SVG truth spectrum. |
 | Personal caution | `/clocked/decide` | Supplies the selected sensitivity probabilities and trigger explanations. |
@@ -59,6 +60,26 @@ The route at `POST /api/analyze` streams stage results as `text/event-stream`. I
 The HTTP client generates a UUID idempotency key for every logical request. Retries reuse the same payload and key for transient failures. API keys are read only on the server and are never returned in an event payload or client bundle.
 
 When Rerank selects no cited catalog source, TrueLabel does not fail the scan or treat the label as proof. Verify receives an explicit no-match record and returns the affected claims as not established. The evidence ledger tells the user that an external catalog source was not selected.
+
+## Hybrid evidence retrieval
+
+TrueLabel does not depend on exact product-title matches in `catalog.json`.
+
+1. It extracts the product category, source-verified claims, and disclosed ingredients.
+2. It lexically scores local catalog records against those facts and takes the strongest category-specific candidates.
+3. When fewer than two local candidates are relevant, it performs a bounded four-second PubMed E-utilities search for clinical trials, reviews, and guidelines.
+4. It appends appropriate FSSAI, CDSCO, ICMR-NIN, ASCI, or FDA baseline records for the product category.
+5. It sends only this candidate set to Rerank, then passes short source clauses, rather than entire documents, into Compare.
+
+If external retrieval times out, returns no suitable clinical record, or yields only baseline rules, the interface displays **Audit inconclusive** and **Insufficient clinical grounding**. It does not render a misleading `0/100` score or call the product harmful.
+
+PubMed retrieval is real and server-side. It works without a key at NCBI's standard rate limit. Set `NCBI_API_KEY` to increase the permitted request rate for a production deployment.
+
+## YouTube caption resolution
+
+Paste a public `youtube.com`, `youtu.be`, Shorts, embed, live, or video URL into the primary field. The server extracts the video ID, requests an English caption track with `youtube-transcript`, and emits a `resolve_source` SSE event before Guard, Protect, Fill, Extract, Rerank, Compare, Verify, and Decide. The normalized transcript becomes the scan text and the evidence ledger identifies the input as a YouTube caption transcript.
+
+Caption access depends on YouTube exposing an English track. Private, invalid, restricted, or captionless videos return a clear instruction to paste the ad text instead. Instagram and TikTok links return an immediate paste-transcript instruction. No result or truth score is created for failed resolution.
 
 ## Architecture
 
@@ -161,6 +182,8 @@ Add the key to `.env.local`:
 
 ```text
 CLOCKED_API_KEY=your_clocked_api_key
+# Optional. Raises PubMed E-utilities throughput for production use.
+NCBI_API_KEY=your_ncbi_api_key
 ```
 
 Start the application:
@@ -197,7 +220,7 @@ Request body:
 }
 ```
 
-The response is a server-sent event stream. Completed stages use `guard_protect`, `fill`, `rerank`, `extract`, `compare`, `verify_decide`, and `complete`. A pipeline failure emits an `error` event with a user-safe message.
+The response is a server-sent event stream. YouTube scans begin with `resolve_source`; every scan then completes `guard_protect`, `fill`, `extract`, `rerank`, `compare`, `verify_decide`, and `complete`. A pipeline failure emits an `error` event with a user-safe message.
 
 ### `GET /api/health`
 
@@ -205,7 +228,7 @@ Returns the server health state, API-key availability, catalog size, and the `li
 
 ## Security, privacy, and operational limits
 
-- `CLOCKED_API_KEY` is server-only and `.env` files are ignored by Git.
+- `CLOCKED_API_KEY` and optional `NCBI_API_KEY` are server-only and `.env` files are ignored by Git.
 - The server uses a SHA-256 hash of IP address and the browser's durable local device ID to enforce 15 live, uncached scans per hour per instance.
 - Text is capped at 15,000 characters. Only PNG, JPEG, and WebP labels are accepted.
 - Optional personal context is capped at 1,000 characters. The interface asks users not to enter names, contact details, medical records, or other identifying information.
@@ -228,7 +251,7 @@ tests/               Deterministic utility tests
 
 ## Deployment
 
-Deploy as one Next.js project on Vercel. Add `CLOCKED_API_KEY` as an encrypted server environment variable for the production environment, then deploy normally. No database, user account system, or client-side secret is required.
+Deploy as one Next.js project on Vercel. Add `CLOCKED_API_KEY` and, if needed for higher PubMed throughput, `NCBI_API_KEY` as encrypted server environment variables for the production environment, then deploy normally. No database, user account system, or client-side secret is required.
 
 ## Responsible-use note
 

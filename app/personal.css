@@ -2,6 +2,9 @@
 .context-field label{display:block;font:500 11px "JetBrains Mono",monospace;letter-spacing:.07em;text-transform:uppercase}
 .context-field textarea{min-height:92px;margin:10px 0 8px}
 .context-field p{margin:0;font-size:11px;line-height:1.45;color:#625f59}
+.source-help{margin:-4px 0 18px;font-size:12px;line-height:1.45;color:#625f59}
+.inconclusive-score{font-size:29px!important;letter-spacing:-1.4px!important;line-height:1.1!important}
+.graph-empty{margin:0 0 12px;border:1px solid var(--ink);padding:10px 12px;background:var(--amber-bg);font-size:12px;line-height:1.45}.graph-node.triggered rect{fill:var(--red-bg);stroke:var(--red);stroke-width:3}.graph-node.triggered text{fill:var(--red)}
 .overall-caution{background:var(--paper)}
 .no-reference{grid-column:1/-1;margin:0;border:1px solid var(--ink);padding:13px;background:var(--amber-bg);font-size:12px;line-height:1.45}
 .ingredient-review{margin-top:24px;border:1px solid var(--ink);padding:20px;background:var(--surface);box-shadow:3px 3px 0 var(--ink)}

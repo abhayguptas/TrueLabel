@@ -3,6 +3,7 @@ import { hasClockedApiKey, ClockedError } from "@/lib/clocked-client";
 import { runPipeline } from "@/lib/pipeline-runner";
 import { consumeLiveScan, rateLimitKey } from "@/lib/rate-limiter";
 import { sensitivityKeys, type AnalyzeRequest, type PipelineEvent } from "@/lib/types";
+import { InputResolutionError, resolveInputText } from "@/lib/youtube-resolver";
 
 export const runtime = "nodejs";
 
@@ -52,9 +53,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const event of runPipeline(validated)) controller.enqueue(sse(event));
+        const resolved = validated.query.trim() ? await resolveInputText(validated.query) : { text: "", source: { type: "text" as const } };
+        if (resolved.source.type === "youtube") controller.enqueue(sse({ stage: "resolve_source", payload: { status: "resolved", source: resolved.source, transcriptLength: resolved.text.length } }));
+        for await (const event of runPipeline({ ...validated, query: resolved.text, inputSource: resolved.source })) controller.enqueue(sse(event));
       } catch (error) {
-        const message = error instanceof ClockedError ? error.message : "The live scan could not be completed.";
+        const message = error instanceof ClockedError || error instanceof InputResolutionError ? error.message : "The live scan could not be completed.";
         controller.enqueue(sse({ stage: "error", payload: { message } }));
       } finally {
         controller.close();

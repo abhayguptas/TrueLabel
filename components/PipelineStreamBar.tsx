@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { PipelineEvent, PipelineStage } from "@/lib/types";
 
 const stages: Array<{ key: PipelineStage; label: string; endpoint: string }> = [
+  { key: "resolve_source", label: "Resolve source", endpoint: "YouTube captions" },
   { key: "guard_protect", label: "Sanitize input", endpoint: "/injection + /pii" },
   { key: "fill", label: "Structure label", endpoint: "/fill" },
   { key: "extract", label: "Extract facts", endpoint: "/extract" },
