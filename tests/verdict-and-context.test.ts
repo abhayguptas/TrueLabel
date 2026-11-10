@@ -8,6 +8,7 @@ import {
 } from "../lib/pipeline-runner";
 import { synthesizeExecutiveVerdict } from "../lib/verdict-synthesizer";
 import { generateFullReportHtml } from "../lib/report-exporter";
+import { buildGraph } from "../lib/graph-layout";
 import type { AnalyzeResult, IngredientResult } from "../lib/types";
 
 describe("interpretPersonalContext", () => {
@@ -196,6 +197,67 @@ Back Label Ingredients: Aqua, Panthenol (10%), Caprylic/Capric Triglyceride, Gly
     const res = evaluateNegativeAssertion("Fragrance-Free", fragranceFreeIngredients);
     expect(res?.verified).toBe(true);
     expect(res?.reason).toContain("zero fragrance");
+  });
+
+  it("evaluates Nature's Crunch chips claims (Natural Flavors, Whole Wheat, Olive Oil) against back label", () => {
+    const chipsIngredients: IngredientResult[] = [
+      { name: "Refined Wheat Flour (Maida)", triggers: [] },
+      { name: "Vegetable Oil (Palm Oil)", triggers: ["palm_oil_free"] },
+      { name: "Potato Flakes", triggers: [] },
+      { name: "Artificial Flavours (Sour Cream & Herbs)", triggers: [] },
+      { name: "Flavour Enhancers (INS 621, INS 631)", triggers: [] },
+      { name: "Artificial Colours (INS 102, INS 110)", triggers: [] }
+    ];
+
+    const naturalFlavors = evaluateNegativeAssertion("100% Natural Flavors", chipsIngredients);
+    expect(naturalFlavors?.verified).toBe(false);
+    expect(naturalFlavors?.reason).toContain("Contradicted");
+    expect(naturalFlavors?.reason).toMatch(/synthetic|Artificial Flavours/i);
+
+    const wholeWheat = evaluateNegativeAssertion("Made from Whole Wheat", chipsIngredients);
+    expect(wholeWheat?.verified).toBe(false);
+    expect(wholeWheat?.reason).toContain("Contradicted");
+    expect(wholeWheat?.reason).toContain("Maida");
+
+    const oliveOil = evaluateNegativeAssertion("Uses Extra Virgin Olive Oil", chipsIngredients);
+    expect(oliveOil?.verified).toBe(false);
+    expect(oliveOil?.reason).toContain("Contradicted");
+    expect(oliveOil?.reason).toContain("Palm Oil");
+  });
+});
+
+describe("buildGraph edge and node key uniqueness", () => {
+  it("never generates duplicate edge IDs or node IDs when claims share ingredients and sources", () => {
+    const multiClaimResult: AnalyzeResult = {
+      claims: [
+        { id: "1", claim: "100% Whole Wheat Brown Bread", verdict: "contradicted", confidence: 0.95 },
+        { id: "2", claim: "No Palm Oil", verdict: "supported", confidence: 0.95 },
+        { id: "3", claim: "28% Daily Fibre Need", verdict: "supported", confidence: 0.95 },
+        { id: "4", claim: "No Added Colours", verdict: "supported", confidence: 0.95 }
+      ],
+      ingredients: [
+        { name: "Wheat Flour [Atta (50%)]", triggers: [] },
+        { name: "Refined Wheat Flour [Maida(50%)]", triggers: [] },
+        { name: "Edible Vegetable Oil (Rice Bran)", triggers: [] },
+        { name: "Wheat Bran", triggers: [] }
+      ],
+      references: [
+        { id: "web-scrape-1", title: "Web Evidence: Whole Wheat", text: "...", sourceUrl: "https://example.com" },
+        { id: "bread-fiber-color-standard", title: "FSSAI Whole Wheat Standard", text: "...", sourceUrl: "https://fssai.gov.in" }
+      ],
+      conflicts: [],
+      risks: [],
+      productCategory: "packaged food",
+      sourceMode: "text"
+    };
+
+    const { nodes, edges } = buildGraph(multiClaimResult);
+    const nodeIds = nodes.map((n) => n.id);
+    const edgeIds = edges.map((e) => e.id);
+
+    // Assert complete uniqueness
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
+    expect(new Set(edgeIds).size).toBe(edgeIds.length);
   });
 });
 

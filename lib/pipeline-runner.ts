@@ -254,6 +254,62 @@ export function evaluateNegativeAssertion(
 ): { verified: boolean; reason: string } | null {
   const norm = claim.toLowerCase();
 
+  // 1. Natural flavors / 100% natural assertions vs synthetic additives
+  if (/100%\s*natural\s*(?:flavou?rs?|ingredients?)|all\s*natural|natural\s*flavou?rs?/i.test(norm)) {
+    const artificial = ingredients.find((i) =>
+      /artificial\s*flavour|artificial\s*colour|flavour\s*enhancer|ins\s*(?:621|631|102|110|122|133)|added\s*flavours?\s*\([^)]*artificial/i.test(i.name)
+    );
+    return {
+      verified: !artificial,
+      reason: !artificial
+        ? "Confirmed: Formulation declares natural flavoring without synthetic flavor enhancers or artificial color codes."
+        : `Contradicted: Discloses synthetic additives (${artificial.name}) and artificial flavor enhancers.`
+    };
+  }
+
+  // 2. Whole wheat assertions vs Refined Wheat Flour (Maida)
+  if (/100%\s*whole\s*wheat|made\s*(?:from|with)\s*whole\s*wheat|\bwhole\s*wheat\s*(?:chips|bread|snack|crackers)\b/i.test(norm)) {
+    const maida = ingredients.find((i) => /maida|refined\s*wheat/i.test(i.name));
+    const atta = ingredients.find((i) => /atta|whole\s*wheat/i.test(i.name));
+    if (maida && !atta) {
+      return {
+        verified: false,
+        reason: `Contradicted: Discloses ${maida.name} as primary flour base with zero whole wheat (atta) present.`
+      };
+    }
+    if (maida && atta) {
+      return {
+        verified: false,
+        reason: `Contradicted: Contains ${maida.name}; not 100% whole grain.`
+      };
+    }
+    if (atta && !maida) {
+      return {
+        verified: true,
+        reason: "Confirmed: Disclosed ingredient declaration uses 100% whole wheat atta without refined maida."
+      };
+    }
+  }
+
+  // 3. Olive oil / Extra virgin olive oil assertions vs Palm / Seed oils
+  if (/(?:extra\s*virgin\s*)?olive\s*oil/i.test(norm)) {
+    const olive = ingredients.find((i) => /olive\s*oil/i.test(i.name));
+    const otherOil = ingredients.find((i) => /palm|palmolein|vegetable\s*oil|rice\s*bran|cottonseed/i.test(i.name));
+    if (!olive && otherOil) {
+      return {
+        verified: false,
+        reason: `Contradicted: Cooking oil declared is ${otherOil.name}; Extra Virgin Olive Oil is absent from disclosures.`
+      };
+    }
+    if (olive) {
+      return {
+        verified: true,
+        reason: "Confirmed: Disclosed ingredients declare authentic olive oil."
+      };
+    }
+  }
+
+  // 4. Fragrance-free assertions
   if (/fragrance[- ]free|no fragrance|unscented/i.test(norm)) {
     const hasFragrance = ingredients.some((i) => /fragrance|parfum|perfume|essential oil/i.test(i.name));
     return {
@@ -264,6 +320,7 @@ export function evaluateNegativeAssertion(
     };
   }
 
+  // 5. No artificial flavors / colors assertions
   if (/no artificial (?:flavou?rs|colors?|colours?)/i.test(norm)) {
     const hasArt = ingredients.some((i) =>
       /artificial\s*flavour|artificial\s*colour|ins\s*102|ins\s*110|ins\s*122|ins\s*133/i.test(i.name)
@@ -276,6 +333,7 @@ export function evaluateNegativeAssertion(
     };
   }
 
+  // 6. No palm oil assertions
   if (/no palm oil|palm[- ]oil[- ]free/i.test(norm)) {
     const hasPalm = ingredients.some((i) => /palm|palmolein/i.test(i.name));
     return {
@@ -286,6 +344,7 @@ export function evaluateNegativeAssertion(
     };
   }
 
+  // 7. No added sugar assertions
   if (/no added sugar|zero added sugar|sugar[- ]free/i.test(norm)) {
     const hasSugar = ingredients.some((i) =>
       /sugar|glucose|maltodextrin|corn syrup|dextrose|invert sugar/i.test(i.name)
@@ -918,6 +977,18 @@ export async function* runPipeline(request: AnalyzeRequest): AsyncGenerator<Pipe
       compareDocuments.push({
         id: "back-oil-fact",
         text: `Back-Label Disclosed Oil: ${palm.name}.`
+      });
+    }
+  }
+
+  if (/natural flavo|all natural|natural/i.test(claims.join(" "))) {
+    const artificial = ingredients.find((ing) =>
+      /artificial\s*flavour|artificial\s*colour|flavour\s*enhancer|ins\s*(?:621|631|102|110)/i.test(ing.name)
+    );
+    if (artificial) {
+      compareDocuments.push({
+        id: "back-flavor-fact",
+        text: `Back-Label Disclosed Additive: ${artificial.name}. Packaging discloses synthetic artificial flavours and flavour enhancers.`
       });
     }
   }

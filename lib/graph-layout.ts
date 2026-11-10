@@ -126,7 +126,7 @@ export function buildGraph(result: AnalyzeResult): { nodes: GraphNode[]; edges: 
       }
 
       if (matchedRef) {
-        const edge2Id = `edge-ing-${matchedIng.name}-ref-${matchedRef.id}`;
+        const edge2Id = `edge-claim-${claim.id}-ing-${matchedIng.name}-ref-${matchedRef.id}`;
         if (!seenEdgeKeys.has(edge2Id)) {
           seenEdgeKeys.add(edge2Id);
           edges.push({

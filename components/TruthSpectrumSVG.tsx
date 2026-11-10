@@ -75,13 +75,13 @@ export function TruthSpectrumSVG({
         style={{ width: "100%", height: "auto" }}
       >
         {/* Render valid edges only */}
-        {validEdges.map((edge) => {
+        {validEdges.map((edge, index) => {
           const from = nodeMap.get(edge.from)!;
           const to = nodeMap.get(edge.to)!;
           const color = colors[edge.verdict];
           return (
             <path
-              key={edge.id}
+              key={`${edge.id}-${index}`}
               className={`graph-edge ${edge.verdict}`}
               d={`M ${from.x + 100} ${from.y} C ${from.x + 185} ${from.y}, ${to.x - 185} ${to.y}, ${to.x - 100} ${to.y}`}
               stroke={color}
